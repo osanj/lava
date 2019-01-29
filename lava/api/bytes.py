@@ -192,6 +192,9 @@ class Vector(ByteRepresentation):
     def size(self):
         return self.scalar.size() * self.n
 
+    def length(self):
+        return self.n
+
     def alignment(self):
         if self.n == 2:
             # "A two-component vector, with components of size N, has a base alignment of 2 N."
@@ -205,7 +208,7 @@ class Vector(ByteRepresentation):
         return self.alignment()
 
     def glsl(self):
-        return "{}vec{} myVec;".format(self.dtype.lower()[0], self.n)
+        return "{}vec{} myVec;".format(self.dtype.lower()[0] if self.dtype is not self.FLOAT else "", self.n)
 
     def convert_data_to_aligned_bytes(self, array):
         if len(array) != self.n:
