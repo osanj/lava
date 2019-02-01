@@ -1,5 +1,6 @@
 # -*- coding: UTF-8 -*-
 
+import itertools
 import logging
 import unittest
 
@@ -34,159 +35,260 @@ class TestByteRepresentation(unittest.TestCase):
 
     # Util
 
-    def shader_from_txt(self, txt):
+    @classmethod
+    def shader_from_txt(cls, txt):
         path_shader = TestUtil.write_to_temp_file(txt, suffix=".comp")
-        shader_path_spirv = compile_glsl(path_shader)
-        return Shader(self.SESSION.device, shader_path_spirv)
+        shader_path_spirv = compile_glsl(path_shader, verbose=True)
+        return Shader(cls.SESSION.device, shader_path_spirv)
 
-    def allocate_buffer(self, size, usage, types):
-        buf = Buffer(self.SESSION.device, size, usage, self.SESSION.queue_index)
-        mem = self.SESSION.device.allocate_memory(types, buf.get_memory_requirements()[0])
+    @classmethod
+    def allocate_buffer(cls, size, usage, types):
+        buf = Buffer(cls.SESSION.device, size, usage, cls.SESSION.queue_index)
+        mem = cls.SESSION.device.allocate_memory(types, buf.get_memory_requirements()[0])
         buf.bind_memory(mem)
-        self.MEMORY[buf] = (buf, mem)
+        cls.MEMORY[buf] = (buf, mem)
         return buf
 
-    def destroy_buffer(self, buf):
-        buf, mem = self.MEMORY[buf]
+    @classmethod
+    def destroy_buffer(cls, buf):
+        buf, mem = cls.MEMORY[buf]
         del buf
         del mem
 
-    # Tests
 
-    def test_scalar_to_array(self):
-        def glsl(dtype):
-            return """\
-                    #version 450
-                    #extension GL_ARB_separate_shader_objects : enable
+class TestByteRepresentationBasicToArray(TestByteRepresentation):
 
-                    layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
-                    layout(std140, binding = 0) uniform scalarIn {{ {} value; }};
-                    layout(std430, binding = 1) writeonly buffer arrayOut {{ {} arr[]; }}; // stdout430 so we have no array alignment fiddling
+    @classmethod
+    def build_glsl_program(cls, container, buffer_usage):
+        return """
+#version 450
+#extension GL_ARB_separate_shader_objects : enable
 
-                    void main() {{
-                        uint index = gl_GlobalInvocationID.x;
-                        arr[index] = value;
-                    }}
-                    """.format(dtype, dtype)
+layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
 
-        test_data = (
-            (Scalar.of(Scalar.INT), -12345, "int"),
-            (Scalar.of(Scalar.UINT), 12345, "uint"),
-            (Scalar.of(Scalar.FLOAT), 3.14, "float"),
-            (Scalar.of(Scalar.DOUBLE), 1e+45, "double")
+{}
+
+layout(std430, binding = 1) writeonly buffer dataOut {{
+    float array[];
+}}; // stdout430 so we have no array alignment fiddling
+
+void main() {{
+{}
+}}""".format(cls.build_glsl_definitions(container, usage=buffer_usage), cls.build_glsl_assignemnts(container))
+
+    @classmethod
+    def build_glsl_definitions(cls, container, binding=0, usage=BufferUsage.STORAGE_BUFFER, var_name="var"):
+        glsl = "layout({}, binding = {}) {} dataIn {{".format(
+            "std140" if container.layout == ByteRepresentation.LAYOUT_STD140 else "std430",
+            binding,
+            "readonly buffer" if usage == BufferUsage.STORAGE_BUFFER else "uniform",
         )
+        glsl += "\n"
 
+        for i, d in enumerate(container.definitions):
+            glsl += "{} {}{};".format(d.glsl_dtype(), var_name, i)
+            glsl += "\n"
+
+        glsl += "};"
+        return glsl
+
+    @classmethod
+    def build_glsl_assignemnts(cls, container, var_name="var", array_name="array"):
+        glsl = ""
+        j = 0
+
+        for i, d in enumerate(container.definitions):
+            var_name_complete = "{}{}".format(var_name, i)
+
+            if isinstance(d, Scalar):
+                glsl_line, step = cls.build_glsl_assignemnts_scalar(j, var_name_complete, array_name)
+            elif isinstance(d, Vector):
+                glsl_line, step = cls.build_glsl_assignments_vector(j, d.length(), var_name_complete, array_name)
+            elif isinstance(d, Matrix):
+                glsl_line, step = cls.build_glsl_assignments_matrix(j, d.n, d.m, var_name_complete, array_name)
+            else:
+                raise RuntimeError()
+
+            glsl += glsl_line
+            glsl += "\n"
+            j += step
+
+        return glsl
+
+    @classmethod
+    def build_glsl_assignemnts_scalar(cls, i, var_name_complete, array_name="array"):
+        glsl = "{}[{}] = float({});".format(array_name, i, var_name_complete)
+        glsl += "\n"
+        return glsl, 1
+
+    @classmethod
+    def build_glsl_assignments_vector(cls, i, n, var_name_complete, array_name="array"):
+        glsl = ""
+        for j in range(n):
+            glsl += "{}[{}] = float({}[{}]);".format(array_name, i + j, var_name_complete, j)
+            glsl += "\n"
+        return glsl, n
+
+    @classmethod
+    def build_glsl_assignments_matrix(cls, i, cols, rows, var_name_complete, array_name="array"):
+        glsl = ""
+        for r, c in itertools.product(range(cols), range(rows)):
+            glsl += "{}[{}] = float({}[{}][{}]);".format(array_name, i + r * cols + c, var_name_complete, c, r)
+            glsl += "\n"
+        return glsl, cols * rows
+
+    @classmethod
+    def build_input_values(cls, container):
+        count = 0
+        values_raw = []
+        values_mapped = {}
+
+        for i, d in enumerate(container.definitions):
+            if isinstance(d, Scalar):
+                values_mapped[d] = d.numpy_dtype()(count)
+                values_raw.append(values_mapped[d])
+                count += 1
+            elif isinstance(d, Vector):
+                values_mapped[d] = np.arange(count, count + d.length(), dtype=d.scalar.numpy_dtype())
+                values_raw.extend(values_mapped[d])
+                count += d.length()
+            elif isinstance(d, Matrix):
+                rows, cols = d.shape()
+                values_mapped[d] = np.arange(count, count + rows * cols, dtype=d.scalar.numpy_dtype())
+                values_raw.extend(values_mapped[d])
+                count += rows * cols
+            else:
+                raise RuntimeError()
+
+        return values_mapped, np.array(values_raw, dtype=np.float32)
+
+    @classmethod
+    def run_program(cls, glsl, bytez_input, expected_output, usage=BufferUsage.STORAGE_BUFFER):
+        session = cls.SESSION
+        shader = cls.shader_from_txt(glsl)
+
+        buffer_in = cls.allocate_buffer(len(bytez_input), usage, MemoryType.CPU)
+        buffer_out = cls.allocate_buffer(expected_output.nbytes, usage, MemoryType.CPU)
+
+        buffer_in.map(bytez_input)
+
+        pipeline = Pipeline(session.device, shader, [buffer_in, buffer_out])
+        executor = Executor(session.device, pipeline, session.queue_index)
+
+        executor.record(1, 1, 1)
+        executor.execute_and_wait()
+
+        with buffer_out.mapped() as bytebuffer:
+            y = np.frombuffer(bytebuffer[:], dtype=expected_output.dtype).copy()
+
+        return y
+
+    def test4(self):
+        buffer_usage = BufferUsage.STORAGE_BUFFER
+        buffer_layout = Container.LAYOUT_STD140
+        buffer_order = Container.ORDER_ROW_MAJOR
+
+        order = [
+            Vector.vec3(),
+            Scalar.float(),
+            Vector.ivec2(),
+            Scalar.float(),
+            Vector.dvec4(),
+            Scalar.uint(),
+            Scalar.uint(),
+            Vector.vec3(),
+            Scalar.uint(),
+            Vector.vec3(),
+            Vector.vec3(),
+        ]
+
+        container = Container(buffer_layout, buffer_order, *order)
+
+        glsl = self.build_glsl_program(container, buffer_usage)
+        values, expected = self.build_input_values(container)
+
+        output = self.run_program(glsl, container.to_bytes(values), expected, buffer_usage)
+
+        print expected
+        print output
+
+
+    def test3(self):
+        glsl = """
+            #version 450
+            #extension GL_ARB_separate_shader_objects : enable
+    
+            layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
+    
+            layout(std140, binding = 0) readonly buffer dataIn {
+                float value1;
+                float value2;
+                vec3 vector;
+            };
+            layout(std430, binding = 1) writeonly buffer dataOut {
+                float array[];
+            }; // stdout430 so we have no array alignment fiddling
+    
+            void main() {
+                // uint index = gl_GlobalInvocationID.x;
+                array[0] = value1;
+                array[1] = value2;
+                array[2] = vector.x;
+                array[3] = vector.y;
+                array[4] = vector.z;
+            }
+            """
+
+
+        expected = np.arange(1000, dtype=np.float32)
+
+        vector1 = Vector(n=3, dtype=Scalar.FLOAT)
+        value1 = Scalar.float()
+        value2 = Scalar.float()
+
+        order = [value1, value2, vector1]
+
+        container = Container(Container.LAYOUT_STD140, *order)
+        values = {}
+        index = 0
+        for d in order:
+            if isinstance(d, Scalar):
+                values[d] = expected[index]
+                index += 1
+            elif isinstance(d, Vector):
+                values[d] = expected[index:index + d.length()]
+                index += d.length()
+            else:
+                raise NotImplementedError()
+
+            #print d.glsl(), values[d], values[d].dtype
+
+        expected = expected[:index]
+        bytez = container.to_bytes(values)
+        print len(bytez)
+
+        # do the stuff
         session = self.SESSION
-        array_length = 8
+        shader = self.shader_from_txt(glsl)
 
-        for scalar, value, shader_dtype in test_data:
-            numpy_dtype = scalar.numpy_dtype()
-            shader = self.shader_from_txt(glsl(shader_dtype))
+        buffer_in = self.allocate_buffer(len(bytez), BufferUsage.STORAGE_BUFFER, MemoryType.CPU)
+        buffer_out = self.allocate_buffer(expected.nbytes, BufferUsage.STORAGE_BUFFER, MemoryType.CPU)
 
-            x1 = value
-            x1_size = scalar.size_aligned()
-            x2 = np.zeros(array_length, dtype=numpy_dtype)
-            x2_size = x2.nbytes
+        buffer_in.map(bytez)
 
-            # memory setup
-            buffer_in = self.allocate_buffer(x1_size, BufferUsage.UNIFORM_BUFFER, MemoryType.CPU)
-            buffer_out = self.allocate_buffer(x2_size, BufferUsage.STORAGE_BUFFER, MemoryType.CPU)
+        pipeline = Pipeline(session.device, shader, [buffer_in, buffer_out])
+        executor = Executor(session.device, pipeline, session.queue_index)
 
-            # map value into the buffer
-            with buffer_in.mapped() as bytebuffer:
-                bytebuffer[:] = scalar.convert_data_to_aligned_bytes(x1)
+        executor.record(1, 1, 1)
+        executor.execute_and_wait()
 
-            # setup pipeline
-            pipeline = Pipeline(session.device, shader, [buffer_in, buffer_out])
-            executor = Executor(session.device, pipeline, session.queue_index)
+        with buffer_out.mapped() as bytebuffer:
+            y = np.frombuffer(bytebuffer[:], dtype=expected.dtype).copy()
 
-            executor.record(array_length, 1, 1)
-            executor.execute_and_wait()
+        # clean up
+        del executor, pipeline
+        self.destroy_buffer(buffer_in)
+        self.destroy_buffer(buffer_out)
 
-            with buffer_out.mapped() as bytebuffer:
-                y = np.frombuffer(bytebuffer[:], dtype=numpy_dtype).copy()
-
-            # clean up
-            del executor, pipeline
-            self.destroy_buffer(buffer_in)
-            self.destroy_buffer(buffer_out)
-
-            y_expected = np.array([value] * array_length, dtype=numpy_dtype)
-            logger.debug("\nvar like {}\nexpected {}\ngot {}".format(scalar.glsl(), y_expected, y))
-            self.assertTrue((y == y_expected).all())
-
-    def test_vector_to_array(self):
-        def glsl(dtype_vec, dtype_array, size_vec):
-            return """\
-                    #version 450
-                    #extension GL_ARB_separate_shader_objects : enable
-
-                    layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
-                    layout(std140, binding = 0) uniform vecIn {{ {} vec; }};
-                    layout(std430, binding = 1) writeonly buffer arrayOut {{ {} arr[]; }};  // stdout430 so we have no array alignment fiddling
-
-                    void main() {{
-                        uint index = gl_GlobalInvocationID.x;
-                        uint n = {};
-                        for(int i = 0; i < n; i++) {{ arr[index * n + i] = vec[i]; }}
-                    }}
-                    """.format(dtype_vec, dtype_array, size_vec)
-
-        max_int = 0x7FFFFFFF
-        max_float = 1e+40
-        test_data = (
-            (Vector(n=2, dtype=Scalar.INT), (-1, 2), ("ivec2", "int")),
-            (Vector(n=3, dtype=Scalar.INT), (-1, 2, -3), ("ivec3", "int")),
-            (Vector(n=4, dtype=Scalar.INT), (-1, 2, -3, 4), ("ivec4", "int")),
-            (Vector(n=2, dtype=Scalar.UINT), (max_int, max_int + 1), ("uvec2", "uint")),
-            (Vector(n=3, dtype=Scalar.UINT), (max_int, max_int + 1, max_int + 2), ("uvec3", "uint")),
-            (Vector(n=4, dtype=Scalar.UINT), (max_int, max_int + 1, max_int + 2, max_int + 3), ("uvec4", "uint")),
-            (Vector(n=2, dtype=Scalar.FLOAT), (np.pi, np.pi + 1), ("vec2", "float")),
-            (Vector(n=3, dtype=Scalar.FLOAT), (np.pi, np.pi + 1, np.pi + 2), ("vec3", "float")),
-            (Vector(n=4, dtype=Scalar.FLOAT), (np.pi, np.pi + 1, np.pi + 2, np.pi + 3), ("vec4", "float")),
-            (Vector(n=2, dtype=Scalar.DOUBLE), (max_float, -1.), ("dvec2", "double")),
-            (Vector(n=3, dtype=Scalar.DOUBLE), (max_float, -1., max_float + 2), ("dvec3", "double")),
-            (Vector(n=4, dtype=Scalar.DOUBLE), (max_float, -1., max_float + 2, max_float + 3), ("dvec4", "double")),
-        )
-
-        session = self.SESSION
-        array_length = 8
-
-        for vector, values, shader_dtypes in test_data:
-            assert vector.length() == len(values)
-
-            numpy_dtype = vector.scalar.numpy_dtype()
-            shader = self.shader_from_txt(glsl(*shader_dtypes, size_vec=len(values)))
-
-            x1 = values
-            x1_size = vector.size_aligned()
-            x2 = np.zeros(array_length * vector.length(), dtype=numpy_dtype)
-            x2_size = x2.nbytes
-
-            # memory setup
-            buffer_in = self.allocate_buffer(x1_size, BufferUsage.UNIFORM_BUFFER, MemoryType.CPU)
-            buffer_out = self.allocate_buffer(x2_size, BufferUsage.STORAGE_BUFFER, MemoryType.CPU)
-
-            # map value into the buffer
-            with buffer_in.mapped() as bytebuffer:
-                bytebuffer[:] = vector.convert_data_to_aligned_bytes(x1)
-
-            # setup pipeline
-            pipeline = Pipeline(session.device, shader, [buffer_in, buffer_out])
-            executor = Executor(session.device, pipeline, session.queue_index)
-
-            executor.record(array_length, 1, 1)
-            executor.execute_and_wait()
-
-            with buffer_out.mapped() as bytebuffer:
-                y = np.frombuffer(bytebuffer[:], dtype=numpy_dtype).copy()
-
-            # clean up
-            del executor, pipeline
-            self.destroy_buffer(buffer_in)
-            self.destroy_buffer(buffer_out)
-
-            y_expected = np.array(values * array_length, dtype=numpy_dtype)
-            logger.debug("\nvar like {}\nexpected {}\ngot {}".format(vector.glsl(), y_expected, y))
-            self.assertTrue((y == y_expected).all())
-
+        print expected
+        print y

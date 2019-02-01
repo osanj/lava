@@ -147,6 +147,10 @@ class Buffer(MemoryObject):
         with self.memory.mapped(self.size, self.memory_offset) as bytebuffer:
             yield bytebuffer
 
+    def map(self, bytez):
+        with self.mapped() as bytebuffer:
+            bytebuffer[:] = bytez
+
     def descriptor_type(self):
         if self.usage == BufferUsage.STORAGE_BUFFER:
             descriptor_type = DescriptorType.STORAGE_BUFFER

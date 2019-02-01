@@ -15,61 +15,122 @@ class ByteRepresentation(object):
     LAYOUT_STD430 = "std430"
     LAYOUT_DEFAULT = LAYOUT_STD140
 
-    #BOOL = "bool"
+    ORDER_COLUMN_MAJOR = "column_major"
+    ORDER_ROW_MAJOR = "row_major"
+    ORDER_DEFAULT = ORDER_ROW_MAJOR
+
+    #BOOL = "bool"  # machine unit 1 byte? (probably not 1 bit)
     INT = "int"
     UINT = "uint"
     FLOAT = "float"
     DOUBLE = "double"
 
-    COLUMN_MAJOR = "column_major"
-    ROW_MAJOR = "row_major"
-
-    def __init__(self, layout):
-        self.layout = layout
+    def __init__(self):
+        pass
 
     def size(self):
         raise NotImplementedError()
 
-    def alignment(self):
+    def alignment(self, layout, order):
         # called 'base alignment' in the specs
         raise NotImplementedError()
 
-    def size_aligned(self):
-        return self.size()
+    def glsl(self, var_name):
+        return "{} {};".format(self.glsl_dtype(), var_name)
 
-    def glsl(self):
+    def glsl_dtype(self):
         raise NotImplementedError()
 
-    def convert_data_to_aligned_bytes(self, *args, **kwargs):
+    def to_bytes(self, values, layout, order):
         raise NotImplementedError()
 
-    def convert_aligned_bytes_to_data(self, bytez):
+    # def from_bytes(self, bytez):
+    #     raise NotImplementedError()
+
+
+class Container(ByteRepresentation):
+
+    def __init__(self, layout, order, *definitions):
+        super(Container, self).__init__()
+        self.layout = layout
+        self.order = order
+        self.definitions = definitions
+
+    @classmethod
+    def of(cls, *definitions):
+        return cls(cls.LAYOUT_DEFAULT, cls.ORDER_DEFAULT, *definitions)
+
+    def size(self):
+        step = 0
+
+        for d in self.definitions:
+            a = d.alignment(self.layout, self.order)
+            padding = (a - step % a) % a
+            step += padding + d.size()
+
+        return step
+
+    def alignment(self, *args, **kwargs):
+        raise RuntimeError()
+
+    def glsl_dtype(self):
         raise NotImplementedError()
+
+    def to_bytes(self, values, *args, **kwargs):
+        bytez = bytearray()
+        settings = [self.layout, self.order]
+
+        for d in self.definitions:
+            a = d.alignment(*settings)
+            padding = (a - len(bytez) % a) % a
+            bytez += bytearray(padding)
+            bytez += d.to_bytes(values[d], *settings)
+
+        return bytez
 
 
 class Scalar(ByteRepresentation):
 
-    def __init__(self, layout=ByteRepresentation.LAYOUT_DEFAULT, *input_dtypes):
-        super(Scalar, self).__init__(layout)
+    def __init__(self, *input_dtypes):
+        super(Scalar, self).__init__()
         self.input_dtypes = input_dtypes
 
     @classmethod
-    def of(cls, dtype, layout=ByteRepresentation.LAYOUT_DEFAULT):
+    def int(cls):
+        return cls.of(Scalar.INT)
+
+    @classmethod
+    def uint(cls):
+        return cls.of(Scalar.UINT)
+
+    @classmethod
+    def float(cls):
+        return cls.of(Scalar.FLOAT)
+
+    @classmethod
+    def double(cls):
+        return cls.of(Scalar.DOUBLE)
+
+    @classmethod
+    def of(cls, dtype):
         if dtype == cls.INT:
-            return ScalarInt(layout)
+            return ScalarInt()
         if dtype == cls.UINT:
-            return ScalarUnsignedInt(layout)
+            return ScalarUnsignedInt()
         if dtype == cls.FLOAT:
-            return ScalarFloat(layout)
+            return ScalarFloat()
         if dtype == cls.DOUBLE:
-            return ScalarDouble(layout)
+            return ScalarDouble()
         raise RuntimeError("Unknown scalar type '{}'".format(dtype))
 
-    def alignment(self):
+    def alignment(self,  *args, **kwargs):
         # "A scalar of size N has a base alignment of N."
         return self.size()
 
-    def convert_data_to_aligned_bytes(self, value):
+    def glsl_dtype(self):
+        raise NotImplementedError()
+
+    def to_bytes(self, value, *args, **kwargs):
         if not isinstance(value, self.input_dtypes):
             raise RuntimeError("{} got dtype {} (expects one of the following {})".format(
                 self.__class__.__name__, type(value), self.input_dtypes
@@ -81,8 +142,8 @@ class Scalar(ByteRepresentation):
 
 class ScalarInt(Scalar):
 
-    def __init__(self, layout=ByteRepresentation.LAYOUT_STD140):
-        super(ScalarInt, self).__init__(layout, int, np.int32)
+    def __init__(self):
+        super(ScalarInt, self).__init__(int, np.int32)
 
     def numpy_dtype(self):
         return np.int32
@@ -90,25 +151,22 @@ class ScalarInt(Scalar):
     def size(self):
         return 4
 
-    def glsl(self):
-        return "int myInt;"
+    def glsl_dtype(self):
+        return "int"
 
-    def convert_data_to_aligned_bytes(self, value):
-        super(ScalarInt, self).convert_data_to_aligned_bytes(value)
+    def to_bytes(self, value, *args, **kwargs):
+        super(ScalarInt, self).to_bytes(value)
         if type(value) is int:
             if not (-(0x7FFFFFFF + 1) <= value <= 0x7FFFFFFF):
                 raise RuntimeError("Value {} is out of memory bounds")
             value = np.int32(value)
         return bytearray(value.tobytes())
 
-    def convert_aligned_bytes_to_data(self, bytez):
-        return 0
-
 
 class ScalarUnsignedInt(Scalar):
 
-    def __init__(self, layout=ByteRepresentation.LAYOUT_STD140):
-        super(ScalarUnsignedInt, self).__init__(layout, int, np.uint32)
+    def __init__(self):
+        super(ScalarUnsignedInt, self).__init__(int, np.uint32)
 
     def numpy_dtype(self):
         return np.uint32
@@ -116,25 +174,22 @@ class ScalarUnsignedInt(Scalar):
     def size(self):
         return 4
 
-    def glsl(self):
-        return "uint myUnsignedInt;"
+    def glsl_dtype(self):
+        return "uint"
 
-    def convert_data_to_aligned_bytes(self, value):
-        super(ScalarUnsignedInt, self).convert_data_to_aligned_bytes(value)
+    def to_bytes(self, value, *args, **kwargs):
+        super(ScalarUnsignedInt, self).to_bytes(value)
         if type(value) is int:
             if not (0 <= value <= 0xFFFFFFFF):
                 raise RuntimeError("Value {} is out of memory bounds")
             value = np.uint32(value)
         return bytearray(value.tobytes())
 
-    def convert_aligned_bytes_to_data(self, bytez):
-        return 0
-
 
 class ScalarFloat(Scalar):
 
-    def __init__(self, layout=ByteRepresentation.LAYOUT_STD140):
-        super(ScalarFloat, self).__init__(layout, float, np.float32)
+    def __init__(self):
+        super(ScalarFloat, self).__init__(float, np.float32)
 
     def numpy_dtype(self):
         return np.float32
@@ -142,24 +197,21 @@ class ScalarFloat(Scalar):
     def size(self):
         return 4
 
-    def glsl(self):
-        return "float myFloat;"
+    def glsl_dtype(self):
+        return "float"
 
-    def convert_data_to_aligned_bytes(self, value):
-        super(ScalarFloat, self).convert_data_to_aligned_bytes(value)
+    def to_bytes(self, value, *args, **kwargs):
+        super(ScalarFloat, self).to_bytes(value)
         if type(value) is float:
             # TODO: add range check
             value = np.float32(value)
         return bytearray(value.tobytes())
 
-    def convert_aligned_bytes_to_data(self, bytez):
-        return 0
-
 
 class ScalarDouble(Scalar):
 
-    def __init__(self, layout=ByteRepresentation.LAYOUT_STD140):
-        super(ScalarDouble, self).__init__(layout, float, np.float64)
+    def __init__(self):
+        super(ScalarDouble, self).__init__(float, np.float64)
 
     def numpy_dtype(self):
         return np.float64
@@ -167,27 +219,72 @@ class ScalarDouble(Scalar):
     def size(self):
         return 8
 
-    def glsl(self):
-        return "double myDouble;"
+    def glsl_dtype(self):
+        return "double"
 
-    def convert_data_to_aligned_bytes(self, value):
-        super(ScalarDouble, self).convert_data_to_aligned_bytes(value)
+    def to_bytes(self, value, *args, **kwargs):
+        super(ScalarDouble, self).to_bytes(value)
         if type(value) is float:
             # TODO: add range check
             value = np.float64(value)
         return bytearray(value.tobytes())
 
-    def convert_aligned_bytes_to_data(self, bytez):
-        return 0
-
 
 class Vector(ByteRepresentation):
 
-    def __init__(self, layout=ByteRepresentation.LAYOUT_DEFAULT, n=4, dtype=ByteRepresentation.FLOAT):
-        super(Vector, self).__init__(layout)
+    def __init__(self, n=4, dtype=ByteRepresentation.FLOAT):
+        super(Vector, self).__init__()
         self.dtype = dtype
         self.n = n
-        self.scalar = Scalar.of(dtype, layout)
+        self.scalar = Scalar.of(dtype)
+
+    @classmethod
+    def ivec2(cls):
+        return Vector(2, cls.INT)
+
+    @classmethod
+    def ivec3(cls):
+        return Vector(3, cls.INT)
+
+    @classmethod
+    def ivec4(cls):
+        return Vector(4, cls.INT)
+
+    @classmethod
+    def uvec2(cls):
+        return Vector(2, cls.UINT)
+
+    @classmethod
+    def uvec3(cls):
+        return Vector(3, cls.UINT)
+
+    @classmethod
+    def uvec4(cls):
+        return Vector(4, cls.UINT)
+
+    @classmethod
+    def vec2(cls):
+        return Vector(2, cls.FLOAT)
+
+    @classmethod
+    def vec3(cls):
+        return Vector(3, cls.FLOAT)
+
+    @classmethod
+    def vec4(cls):
+        return Vector(4, cls.FLOAT)
+
+    @classmethod
+    def dvec2(cls):
+        return Vector(2, cls.DOUBLE)
+
+    @classmethod
+    def dvec3(cls):
+        return Vector(3, cls.DOUBLE)
+
+    @classmethod
+    def dvec4(cls):
+        return Vector(4, cls.DOUBLE)
 
     def size(self):
         return self.scalar.size() * self.n
@@ -195,7 +292,7 @@ class Vector(ByteRepresentation):
     def length(self):
         return self.n
 
-    def alignment(self):
+    def alignment(self,  *args, **kwargs):
         if self.n == 2:
             # "A two-component vector, with components of size N, has a base alignment of 2 N."
             return self.scalar.size() * 2
@@ -204,43 +301,31 @@ class Vector(ByteRepresentation):
             return self.scalar.size() * 4
         return -1
 
-    def size_aligned(self):
-        return self.alignment()
+    def glsl_dtype(self):
+        return "{}vec{}".format(self.dtype.lower()[0] if self.dtype is not self.FLOAT else "", self.n)
 
-    def glsl(self):
-        return "{}vec{} myVec;".format(self.dtype.lower()[0] if self.dtype is not self.FLOAT else "", self.n)
-
-    def convert_data_to_aligned_bytes(self, array):
+    def to_bytes(self, array, *args, **kwargs):
         if len(array) != self.n:
             raise RuntimeError("Array as length {}, expected {}".format(len(array), self.n))
 
         bytez = bytearray()
 
         for value in array:
-            bytez += self.scalar.convert_data_to_aligned_bytes(value)
-
-        if self.n == 3:
-            bytez += bytearray(self.scalar.size())
+            bytez += self.scalar.to_bytes(value)
 
         return bytez
-
-    def convert_aligned_bytes_to_data(self, bytez):
-        raise NotImplementedError()
 
 
 class Matrix(ByteRepresentation):
 
-    def __init__(self, layout=ByteRepresentation.LAYOUT_DEFAULT, order=ByteRepresentation.ROW_MAJOR, n=4, m=4,
-                 dtype=ByteRepresentation.FLOAT):
-        super(Matrix, self).__init__(layout)
-        self.order = order
-
+    def __init__(self, n=4, m=4, dtype=ByteRepresentation.FLOAT):
+        super(Matrix, self).__init__()
         if dtype not in (self.FLOAT, self.DOUBLE):
             raise RuntimeError("Matrices of type {} are not supported".format(dtype))
         self.dtype = dtype
         self.n = n  # columns
         self.m = m  # rows
-        self.scalar = Scalar.of(dtype, layout)
+        self.scalar = Scalar.of(dtype)
 
     def size(self):
         return self.scalar.size() * self.n * self.m
@@ -248,7 +333,7 @@ class Matrix(ByteRepresentation):
     def shape(self):
         return self.m, self.n
 
-    def alignment(self):
+    def alignment(self, layout, order):
         # "A row-major matrix of C columns has a base alignment equal to the base alignment of a vector of C matrix
         #  components."
         if self.order == self.ROW_MAJOR:
@@ -259,17 +344,10 @@ class Matrix(ByteRepresentation):
             return self.scalar.alignment()
         return -1
 
-    def size_aligned(self):
-        if self.order == self.ROW_MAJOR:
-            return Vector(self.layout, self.n, self.dtype).alignment() * self.m
-        if self.order == self.COLUMN_MAJOR:
-            return self.size()
-        return -1
+    def glsl_dtype(self):
+        return "{}mat{}x{}".format("d" if self.dtype == self.DOUBLE else "", self.n, self.m)
 
-    def glsl(self):
-        return "{}mat{}x{} myMat;".format("d" if self.dtype == self.DOUBLE else "", self.n, self.m)
-
-    def convert_data_to_aligned_bytes(self, array):
+    def to_bytes(self, array, layout, order):
         if isinstance(array, (list, tuple)):
             array = np.array(array, dtype=self.scalar.numpy_dtype())
 
@@ -282,75 +360,85 @@ class Matrix(ByteRepresentation):
             row_vector = Vector(self.layout, self.n, self.dtype)
 
             for r in range(self.m):
-                bytez += row_vector.convert_data_to_aligned_bytes(array[r, :])
+                bytez += row_vector.to_bytes(array[r, :])
 
         if self.order == self.COLUMN_MAJOR:
             for value in array.transpose().flatten():
-                bytez += self.scalar.convert_data_to_aligned_bytes(value)
+                bytez += self.scalar.to_bytes(value)
 
         return bytez
 
-    def convert_aligned_bytes_to_data(self, bytez):
-        raise NotImplementedError()
+
+# class Struct(ByteRepresentation):
+#
+#     def __init__(self, *components):
+#         super(Struct, self).__init__()
+#         for i, component in enumerate(components):
+#             if component.layout != layout:
+#                 raise RuntimeError("Layout mismatch: struct has {}, but component at index {} has {}".format(
+#                     layout, i, component.layout
+#                 ))
+#
+#         self.components = components
+#
+#     def size(self):
+#         return sum([c.size() for c in self.components])
+#
+#     def alignment(self):
+#         return max([c.alignment() for c in self.components])
+#
+#     def size_aligned(self):
+#         size = self.size()
+#         alignment = self.size()
+#
+#
+#     def glsl(self):
+#         raise NotImplementedError()
+#
+#     def convert_data_to_aligned_bytes(self, *args, **kwargs):
+#         raise NotImplementedError()
+#
+#     def convert_aligned_bytes_to_data(self, bytez):
+#         raise NotImplementedError()
+#
+#
+#
+# class Tensor(ByteRepresentation):
+#
+#     """ata structure implementation of ARB_arrays_of_arrays"""
+#     # https://www.khronos.org/registry/OpenGL/extensions/ARB/ARB_arrays_of_arrays.txt
+#
+#     def __init__(self, layout=ByteRepresentation.LAYOUT_DEFAULT, order=ByteRepresentation.ROW_MAJOR, dims=(),
+#                  dtype=ByteRepresentation.FLOAT):
+#
+#         pass
+#
+#     def shape(self):
+#         return (4, 4, 4, 4)
+#
+#
+# class DynamicArray(Struct):
+#
+#     def __init__(self):
+#         pass
 
 
-class Struct(ByteRepresentation):
-
-    def __init__(self, layout=ByteRepresentation.LAYOUT_DEFAULT, *components):
-        super(Struct, self).__init__(layout)
-        for i, component in enumerate(components):
-            if component.layout != layout:
-                raise RuntimeError("Layout mismatch: struct has {}, but component at index {} has {}".format(
-                    layout, i, component.layout
-                ))
-
-        self.components = components
-
-    def size(self):
-        return sum([c.size() for c in self.components])
-
-    def alignment(self):
-        return max([c.alignment() for c in self.components])
-
-    def size_aligned(self):
-        size = self.size()
-        alignment = self.size()
-
-
-    def glsl(self):
-        raise NotImplementedError()
-
-    def convert_data_to_aligned_bytes(self, *args, **kwargs):
-        raise NotImplementedError()
-
-    def convert_aligned_bytes_to_data(self, bytez):
-        raise NotImplementedError()
-
-
-
-class Tensor(ByteRepresentation):
-
-    """ata structure implementation of ARB_arrays_of_arrays"""
-    # https://www.khronos.org/registry/OpenGL/extensions/ARB/ARB_arrays_of_arrays.txt
-
-    def __init__(self, layout=ByteRepresentation.LAYOUT_DEFAULT, order=ByteRepresentation.ROW_MAJOR, dims=(),
-                 dtype=ByteRepresentation.FLOAT):
-
-        pass
-
-    def shape(self):
-        return (4, 4, 4, 4)
-
-
-class DynamicArray(Struct):
-
-    def __init__(self):
-        pass
-
-
+# specs
+# https://www.khronos.org/registry/vulkan/specs/1.1/html/chap14.html#interfaces-resources
+# https://github.com/KhronosGroup/glslang/issues/201#issuecomment-204785552 (example)
+#
+# https://www.khronos.org/registry/OpenGL/extensions/ARB/ARB_uniform_buffer_object.txt
+#   CTRL+F "Sub-section 2.15.3.1.2"
+#   CTRL+F "The following example illustrates the rules specified by the "std140" layout"
+# https://www.khronos.org/registry/OpenGL/extensions/ARB/ARB_shader_storage_buffer_object.txt
+# https://www.khronos.org/registry/OpenGL/extensions/ARB/ARB_arrays_of_arrays.txt
+#
+# Wiki layout bindings etc
+# https://www.khronos.org/opengl/wiki/Interface_Block_(GLSL)
+# https://www.khronos.org/opengl/wiki/Data_Type_(GLSL)
+#
 # more stuff to come
 # http://www.paranormal-entertainment.com/idr/blog/posts/2014-01-29T17:08:42Z-GLSL_multidimensional_array_madness/
-
 
 
 if __name__ == "__main__":
