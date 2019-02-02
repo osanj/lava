@@ -11,6 +11,12 @@ class ByteRepresentation(object):
 
     """Data structure implementation of Vulkan specification 14.5.4."""
 
+    # References
+    # https://www.khronos.org/registry/vulkan/specs/1.1/html/chap14.html#interfaces-resources-layout
+    # https://www.khronos.org/registry/OpenGL/extensions/ARB/ARB_uniform_buffer_object.txt
+    #   search document for "Sub-section 2.15.3.1.2"
+    #   search document for "The following example illustrates the rules specified by the "std140" layout"
+
     LAYOUT_STD140 = "std140"
     LAYOUT_STD430 = "std430"
     LAYOUT_DEFAULT = LAYOUT_STD140
@@ -316,6 +322,92 @@ class Vector(ByteRepresentation):
         return bytez
 
 
+class Array(Container):
+
+    def __init__(self, layout, order, definition, n):
+        super(Array, self).__init__(layout, order, None)
+        self.definition = definition
+        self.n = n
+
+        # precompute alignment / stride
+        self.a = None
+        if layout == self.LAYOUT_STD140:
+            self.a = self.definition.alignment(layout, order)
+            self.a += (16 - self.a % 16) % 16
+        if layout == self.LAYOUT_STD430:
+            self.a = self.definition.alignment(layout, order)
+
+    @classmethod
+    def of(cls, definition, n):
+        return cls(cls.LAYOUT_DEFAULT, cls.ORDER_DEFAULT, definition, n)
+
+    def length(self):
+        return self.n
+
+    def size(self):
+        s = self.definition.size()
+        s += (self.a - s % self.a) % self.a  # pad to array stride
+        return s * self.n
+
+    def alignment(self, layout, order):
+        return self.a
+
+    def glsl_dtype(self):
+        return "{}[{}]".format(self.definition.glsl_dtype(), self.n)
+
+    def to_bytes(self, values, *args, **kwargs):
+        bytez = bytearray()
+
+        for value in values:
+            bytez += self.definition.to_bytes(value)
+            padding = (self.a - len(bytez) % self.a) % self.a
+            bytez += bytearray(padding)
+
+        return bytez
+
+
+class NdArray(Array):
+
+    def __init__(self, layout, order, definition, shape):
+        super(NdArray, self).__init__(layout, order, definition, np.product(shape))
+        if not isinstance(definition, Scalar):
+            raise RuntimeError("{} only supports scalars".format(self.__class__.__name__))
+        self._shape = shape
+
+    def shape(self):
+        return self._shape
+
+    def size(self):
+        s = self.definition.size()
+        s += (self.a - s % self.a) % self.a  # pad to array stride
+        return s * self.n
+
+    def alignment(self, layout, order):
+        return self.a
+
+    def glsl_dtype(self):
+        return ("{}" + "[{}]" * len(self.shape())).format(self.definition.glsl_dtype(), self.n)
+
+    def to_bytes(self, array, *args, **kwargs):
+        if not isinstance(array, np.ndarray):
+            raise RuntimeError("Incorrect datatype {}, expected {}".format(type(array), np.ndarray))
+        # if array.dtype is not self.definition.numpy_dtype():
+        #     raise RuntimeError("Incorrect datatype {}, expected {}".format(array.dtype, self.definition.numpy_dtype()))
+        if array.shape != self.shape():
+            raise RuntimeError("Array has shape {}, expected {}".format(array.shape, self.shape()))
+
+        p = (self.a - self.definition.alignment()) / self.definition.size()
+        a = self.a / self.definition.size()
+
+        array_padded = np.zeros(a * np.product(array.shape), dtype=array.dtype)
+        mask = (np.arange(len(array_padded)) % a) < (a - p)
+        array_padded[mask] = array.flatten()
+
+        # for std430 the following would be sufficient: return array.flatten().tobytes()
+        return array_padded.tobytes()
+
+
+
 class Matrix(ByteRepresentation):
 
     def __init__(self, n=4, m=4, dtype=ByteRepresentation.FLOAT):
@@ -424,7 +516,7 @@ class Matrix(ByteRepresentation):
 
 
 # specs
-# https://www.khronos.org/registry/vulkan/specs/1.1/html/chap14.html#interfaces-resources
+# https://www.khronos.org/registry/vulkan/specs/1.1/html/chap14.html#interfaces-resources-layout
 # https://github.com/KhronosGroup/glslang/issues/201#issuecomment-204785552 (example)
 #
 # https://www.khronos.org/registry/OpenGL/extensions/ARB/ARB_uniform_buffer_object.txt

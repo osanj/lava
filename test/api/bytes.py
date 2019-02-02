@@ -56,25 +56,27 @@ class TestByteRepresentation(unittest.TestCase):
         del mem
 
 
-class TestByteRepresentationBasicToArray(TestByteRepresentation):
+class TestBasicIn(TestByteRepresentation):
+
+    """Transferring scalars and vectors in arbitrary order into the shader"""
 
     @classmethod
     def build_glsl_program(cls, container, buffer_usage):
         return """
-#version 450
-#extension GL_ARB_separate_shader_objects : enable
-
-layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
-
-{}
-
-layout(std430, binding = 1) writeonly buffer dataOut {{
-    float array[];
-}}; // stdout430 so we have no array alignment fiddling
-
-void main() {{
-{}
-}}""".format(cls.build_glsl_definitions(container, usage=buffer_usage), cls.build_glsl_assignemnts(container))
+        #version 450
+        #extension GL_ARB_separate_shader_objects : enable
+        
+        layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
+        
+        {}
+        
+        layout(std430, binding = 1) writeonly buffer dataOut {{
+            float array[];
+        }}; // stdout430 so we have no array alignment fiddling
+        
+        void main() {{
+        {}
+        }}""".format(cls.build_glsl_definitions(container, usage=buffer_usage), cls.build_glsl_assignemnts(container))
 
     @classmethod
     def build_glsl_definitions(cls, container, binding=0, usage=BufferUsage.STORAGE_BUFFER, var_name="var"):
@@ -183,7 +185,7 @@ void main() {{
 
         return y
 
-    def test4(self):
+    def test(self):
         buffer_usage = BufferUsage.STORAGE_BUFFER
         buffer_layout = Container.LAYOUT_STD140
         buffer_order = Container.ORDER_ROW_MAJOR
@@ -213,58 +215,158 @@ void main() {{
         print output
 
 
-    def test3(self):
+class TestMatrixIn(TestByteRepresentation):
+
+    def test(self):
+        print "tbi"
+
+
+class TestArrayIn(TestByteRepresentation):
+
+    """Transferring multidimensional arrays into the shader"""
+
+    def test1(self):
         glsl = """
             #version 450
             #extension GL_ARB_separate_shader_objects : enable
-    
+
             layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
-    
+
             layout(std140, binding = 0) readonly buffer dataIn {
-                float value1;
-                float value2;
-                vec3 vector;
+                uint sca1;
+                float[2][5] mat;
+                double sca2;
             };
             layout(std430, binding = 1) writeonly buffer dataOut {
                 float array[];
             }; // stdout430 so we have no array alignment fiddling
-    
+
             void main() {
                 // uint index = gl_GlobalInvocationID.x;
-                array[0] = value1;
-                array[1] = value2;
-                array[2] = vector.x;
-                array[3] = vector.y;
-                array[4] = vector.z;
+                
+                for (int i = 0; i < mat.length(); i++) {
+                    for (int j = 0; j < mat[i].length(); j++) {
+                        //if (i * mat[i].length() + j < 2) {
+                        //    continue;
+                        //}
+                        array[i * mat[i].length() + j] = mat[i][j];
+                    }
+                }
+                
+                //out1 = 999.;
+                //array[0] = float(sca1);
+                array[1] = float(sca2);
+                
+                
+                // array[0] = mat.length();
+                // array[1] = mat[0].length();
+                // array[5] = mat[3][0];
             }
             """
+        layout = Container.LAYOUT_STD140
+        matrix_order = Container.ORDER_ROW_MAJOR
 
+        shape = (2, 5)
+        expected = np.arange(np.product(shape), dtype=np.float32)
 
-        expected = np.arange(1000, dtype=np.float32)
+        scalar_uint = Scalar.uint()
+        scalar_double = Scalar.double()
+        array_inner = Array(layout, matrix_order, Scalar.float(), shape[1])
+        array_outer = Array(layout, matrix_order, array_inner, shape[0])
 
-        vector1 = Vector(n=3, dtype=Scalar.FLOAT)
-        value1 = Scalar.float()
-        value2 = Scalar.float()
+        order = [scalar_uint, array_outer, scalar_double]
 
-        order = [value1, value2, vector1]
+        container = Container(layout, matrix_order, *order)
 
-        container = Container(Container.LAYOUT_STD140, *order)
-        values = {}
-        index = 0
-        for d in order:
-            if isinstance(d, Scalar):
-                values[d] = expected[index]
-                index += 1
-            elif isinstance(d, Vector):
-                values[d] = expected[index:index + d.length()]
-                index += d.length()
-            else:
-                raise NotImplementedError()
+        values = {
+            scalar_uint: 111,
+            scalar_double: 222.,
+            array_outer: expected.reshape(shape)
+        }
 
-            #print d.glsl(), values[d], values[d].dtype
-
-        expected = expected[:index]
+        size = container.size()
         bytez = container.to_bytes(values)
+
+        print size
+        print len(bytez)
+
+        # do the stuff
+        session = self.SESSION
+        shader = self.shader_from_txt(glsl)
+
+        buffer_in = self.allocate_buffer(len(bytez), BufferUsage.STORAGE_BUFFER, MemoryType.CPU)
+        buffer_out = self.allocate_buffer(expected.nbytes, BufferUsage.STORAGE_BUFFER, MemoryType.CPU)
+
+        buffer_in.map(bytez)
+
+        pipeline = Pipeline(session.device, shader, [buffer_in, buffer_out])
+        executor = Executor(session.device, pipeline, session.queue_index)
+
+        executor.record(1, 1, 1)
+        executor.execute_and_wait()
+
+        with buffer_out.mapped() as bytebuffer:
+            y = np.frombuffer(bytebuffer[:], dtype=expected.dtype).copy()
+
+        # clean up
+        del executor, pipeline
+        self.destroy_buffer(buffer_in)
+        self.destroy_buffer(buffer_out)
+
+        print expected
+        print y
+
+    def test2(self):
+        glsl = """
+            #version 450
+            #extension GL_ARB_separate_shader_objects : enable
+
+            layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
+
+            layout(std430, binding = 0) readonly buffer dataIn {
+                float[3][5][11] mat;
+            };
+            layout(std430, binding = 1) writeonly buffer dataOut {
+                float array[];
+            }; // stdout430 so we have no array alignment fiddling
+
+            void main() {
+                // uint index = gl_GlobalInvocationID.x;
+                
+                for (int i = 0; i < mat.length(); i++) {
+                    for (int j = 0; j < mat[i].length(); j++) {
+                        for (int k = 0; k < mat[i][j].length(); k++) {
+                            uint index = i * mat[i].length() * mat[i][j].length() + j * mat[i][j].length() + k;
+                            array[index] = mat[i][j][k];
+                        }
+                    }
+                }
+                                
+                
+                // array[0] = mat.length();
+                // array[1] = mat[0].length();
+                // array[5] = mat[3][0];
+            }
+            """
+        layout = Container.LAYOUT_STD430
+        matrix_order = Container.ORDER_ROW_MAJOR
+
+        shape = (12, 1, 7)
+        expected = np.arange(np.product(shape), dtype=np.float32)
+
+        array = NdArray(layout, matrix_order, Scalar.float(), shape)
+        order = [array]
+
+        container = Container(layout, matrix_order, *order)
+
+        values = {
+            array: expected.reshape(shape)
+        }
+
+        size = container.size()
+        bytez = container.to_bytes(values)
+
+        print size
         print len(bytez)
 
         # do the stuff

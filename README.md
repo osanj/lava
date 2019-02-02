@@ -52,3 +52,8 @@ numpy + shaders = <3
   * found usable documentation and understood the alignment and offset situation after all
   * works smoothly for scalars and vectors
   * arrays are probably next
+
+* 02.02.2019
+  * when overwriting (assigning it a second time) the first value of a dynamic output array in a ssbo it resets the entire array to 0
+  * arrays for basic types (uint, int, float, double) is working (also special case with numpy array)
+  
