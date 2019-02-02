@@ -2,7 +2,7 @@
 
 import vulkan as vk
 
-from lava.api.constants import VALIDATION_LAYERS
+from lava.api.constants.vk import VALIDATION_LAYERS
 from lava.api.util import Debugger
 
 

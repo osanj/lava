@@ -5,7 +5,7 @@ import logging
 
 import vulkan as vk
 
-from lava.api.constants import DeviceType, MemoryType, QueueType, VALIDATION_LAYERS
+from lava.api.constants.vk import DeviceType, MemoryType, QueueType, VALIDATION_LAYERS
 from lava.api.memory import Memory
 
 

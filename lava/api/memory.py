@@ -4,7 +4,7 @@ import contextlib
 
 import vulkan as vk
 
-from lava.api.constants import BufferUsage, DescriptorType
+from lava.api.constants.vk import BufferUsage, DescriptorType
 
 # PushConstants
 # SampledImage

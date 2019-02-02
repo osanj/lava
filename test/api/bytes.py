@@ -4,12 +4,13 @@ import itertools
 import logging
 import unittest
 
-from lava.api.constants import BufferUsage, MemoryType
+from lava.api.constants.vk import BufferUsage, MemoryType
 from lava.api.bytes import *
 from lava.api.memory import Buffer
 from lava.api.pipeline import Executor, Pipeline
-from lava.api.shader import compile_glsl, Shader
+from lava.api.shader import Shader
 from lava.session import Session
+from lava.util import compile_glsl
 
 from test import TestUtil
 #from test import TestSession

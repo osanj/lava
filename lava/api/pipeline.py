@@ -4,7 +4,7 @@ import ctypes
 
 import vulkan as vk
 
-from lava.api.constants import DescriptorType, QueueType, TIMEOUT_FOREVER
+from lava.api.constants.vk import DescriptorType, QueueType, TIMEOUT_FOREVER
 from lava.api.util import Event, Fence
 
 

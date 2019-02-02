@@ -2,7 +2,7 @@
 
 import logging
 
-from lava.api.constants import MemoryType, QueueType
+from lava.api.constants.vk import MemoryType, QueueType
 from lava.api.device import PhysicalDevice, Device
 from lava.api.instance import Instance
 
