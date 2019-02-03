@@ -79,66 +79,105 @@ class TestByteRepresentation(unittest.TestCase):
         return y
 
 
-class TestBasicIn(TestByteRepresentation):
-
+class TestCpuToShader(TestByteRepresentation):
     """Transferring scalars and vectors in arbitrary order into the shader"""
 
     @classmethod
-    def build_glsl_program(cls, container, buffer_usage):
-        return """
-        #version 450
-        #extension GL_ARB_separate_shader_objects : enable
-        
-        layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
-        
-        {}
-        
-        layout(std430, binding = 1) writeonly buffer dataOut {{
-            float array[];
-        }}; // stdout430 so we have no array alignment fiddling
-        
-        void main() {{
-        {}
-        }}""".format(cls.build_glsl_definitions(container, usage=buffer_usage), cls.build_glsl_assignemnts(container))
+    def build_glsl_program(cls, container, structs, buffer_usage):
+        template = """
+#version 450
+#extension GL_ARB_separate_shader_objects : enable
+
+layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
+
+{}
+
+{}
+
+layout(std430, binding = 1) writeonly buffer dataOut {{
+    float array[];
+}}; // stdout430 so we have no array alignment fiddling
+
+void main() {{
+{}
+}}"""
+
+        struct_definitions = "\n\n".join([cls.build_glsl_struct_definition(struct) for struct in structs])
+        block_definition = cls.build_glsl_block_definition(container, usage=buffer_usage)
+        assignments, _ = cls.build_glsl_assignemnts(container.definitions)
+
+        return template.format(struct_definitions, block_definition, assignments)
 
     @classmethod
-    def build_glsl_definitions(cls, container, binding=0, usage=BufferUsage.STORAGE_BUFFER, var_name="var"):
+    def generate_var_name(cls, definition, index, prefix=""):
+        return "{}{}{}".format(prefix, definition.__class__.__name__.lower(), index)
+
+    @classmethod
+    def build_glsl_block_definition(cls, container, binding=0, usage=BufferUsage.STORAGE_BUFFER):
         glsl = "layout({}, binding = {}) {} dataIn {{".format(
-            "std140" if container.layout == ByteRepresentation.LAYOUT_STD140 else "std430",
-            binding,
-            "readonly buffer" if usage == BufferUsage.STORAGE_BUFFER else "uniform",
-        )
+            "std140" if container.layout == ByteRepresentation.LAYOUT_STD140 else "std430", binding,
+            "readonly buffer" if usage == BufferUsage.STORAGE_BUFFER else "uniform", )
         glsl += "\n"
 
         for i, d in enumerate(container.definitions):
-            glsl += "{} {}{};".format(d.glsl_dtype(), var_name, i)
+            glsl += "  {} {};".format(d.glsl_dtype(), cls.generate_var_name(d, i))
             glsl += "\n"
 
-        glsl += "};"
-        return glsl
+        return glsl + "};"
 
     @classmethod
-    def build_glsl_assignemnts(cls, container, var_name="var", array_name="array"):
+    def build_glsl_struct_definition(cls, struct):
+        glsl = "struct {} {{".format(struct.glsl_dtype())
+        glsl += "\n"
+
+        for i, d in enumerate(struct.definitions):
+            glsl += "  {} {};".format(d.glsl_dtype(), cls.generate_var_name(d, i))
+            glsl += "\n"
+
+        return glsl + "};"
+
+    @classmethod
+    def build_glsl_assignemnts(cls, definitions, var_name=None, array_name="array", array_index=0, parent=None, var_name_prefix=""):
         glsl = ""
-        j = 0
+        j = array_index
 
-        for i, d in enumerate(container.definitions):
-            var_name_complete = "{}{}".format(var_name, i)
-
+        for i, d in enumerate(definitions):
             if isinstance(d, Scalar):
+                var_name_complete = var_name or cls.generate_var_name(d, i, var_name_prefix)
                 glsl_code, step = cls.build_glsl_assignemnts_scalar(j, var_name_complete, array_name)
+
             elif isinstance(d, Vector):
+                var_name_complete = var_name or cls.generate_var_name(d, i, var_name_prefix)
                 glsl_code, step = cls.build_glsl_assignments_vector(j, d.length(), var_name_complete, array_name)
+
             elif isinstance(d, Matrix):
+                var_name_complete = var_name or cls.generate_var_name(d, i, var_name_prefix)
                 glsl_code, step = cls.build_glsl_assignments_matrix(j, d.n, d.m, var_name_complete, array_name)
+
+            elif isinstance(d, Array):
+                var_name_complete = var_name or cls.generate_var_name(d, i, var_name_prefix)
+                if isinstance(d.definition, Scalar):
+                    glsl_code, step = cls.build_glsl_assignemnts_array_scalar(j, d.dims, var_name_complete, array_name)
+                else:
+                    glsl_code, step = cls.build_glsl_assignemnts_array_complex(j, d, var_name_complete, array_name)
+
+            elif isinstance(d, Struct):
+                if isinstance(parent, Array):
+                    var_name_complete = var_name + "."
+                    glsl_code, step_overall = cls.build_glsl_assignemnts(d.definitions, var_name=None, var_name_prefix=var_name_complete, array_name=array_name, array_index=j, parent=d)
+                    step = step_overall - j
+                else:
+                    var_name_complete = var_name or cls.generate_var_name(d, i, var_name_prefix) + "."
+                    glsl_code, step_overall = cls.build_glsl_assignemnts(d.definitions, var_name=None, var_name_prefix=var_name_complete, array_name=array_name, array_index=j, parent=d)
+                    step = step_overall - j
+
             else:
                 raise RuntimeError()
 
             glsl += glsl_code
-            glsl += "\n"
             j += step
 
-        return glsl
+        return glsl, j
 
     @classmethod
     def build_glsl_assignemnts_scalar(cls, i, var_name_complete, array_name="array"):
@@ -150,73 +189,130 @@ class TestBasicIn(TestByteRepresentation):
     def build_glsl_assignments_vector(cls, i, n, var_name_complete, array_name="array"):
         glsl = ""
         for j in range(n):
-            glsl += "{}[{}] = float({}[{}]);".format(array_name, i + j, var_name_complete, j)
+            glsl += "{}[{}] = float({}.{});".format(array_name, i + j, var_name_complete, "xyzw"[j])
             glsl += "\n"
         return glsl, n
 
     @classmethod
     def build_glsl_assignments_matrix(cls, i, cols, rows, var_name_complete, array_name="array"):
         glsl = ""
-        for r, c in itertools.product(range(cols), range(rows)):
-            glsl += "{}[{}] = float({}[{}][{}]);".format(array_name, i + r * cols + c, var_name_complete, c, r)
+        for k, r, c in enumerate(itertools.product(range(cols), range(rows))):
+            glsl += "{}[{}] = float({}[{}][{}]);".format(array_name, i + k, var_name_complete, c, r)
             glsl += "\n"
         return glsl, cols * rows
 
     @classmethod
-    def build_input_values(cls, container):
-        count = 0
+    def build_glsl_assignemnts_array_scalar(cls, i, dims, var_name_complete, array_name="array"):
+        glsl = ""
+        for k, indices in enumerate(itertools.product(*[range(d) for d in dims])):
+            glsl += ("{}[{}] = float({}" + "[{}]" * len(dims) + ");").format(array_name, i + k, var_name_complete, *indices)
+            glsl += "\n"
+        return glsl, np.product(dims)
+
+    @classmethod
+    def build_glsl_assignemnts_array_complex(cls, i, array, var_name_complete, array_name="array"):
+        glsl = ""
+        old_i = i
+        for indices in itertools.product(*[range(d) for d in array.dims]):
+            new_var_name_complete = ("{}" + "[{}]" * len(array.dims)).format(var_name_complete, *indices)
+            new_glsl, new_i = cls.build_glsl_assignemnts([array.definition], new_var_name_complete, array_name=array_name, array_index=i, parent=array)
+            glsl += new_glsl
+            i = new_i
+        return glsl, i - old_i
+
+    @classmethod
+    def build_input_values(cls, definitions, offset=0):
+        count = offset
         values_raw = []
         values_mapped = {}
 
-        for i, d in enumerate(container.definitions):
+        for i, d in enumerate(definitions):
             if isinstance(d, Scalar):
                 values_mapped[d] = d.numpy_dtype()(count)
                 values_raw.append(values_mapped[d])
                 count += 1
+
             elif isinstance(d, Vector):
                 values_mapped[d] = np.arange(count, count + d.length(), dtype=d.scalar.numpy_dtype())
                 values_raw.extend(values_mapped[d])
                 count += d.length()
+
             elif isinstance(d, Matrix):
                 rows, cols = d.shape()
                 values_mapped[d] = np.arange(count, count + rows * cols, dtype=d.scalar.numpy_dtype())
                 values_raw.extend(values_mapped[d])
                 count += rows * cols
+
+            elif isinstance(d, Array):
+                if isinstance(d.definition, Scalar):
+                    data = np.zeros(d.shape(), dtype=d.definition.numpy_dtype())
+                    for indices in itertools.product(*[range(s) for s in d.shape()]):
+                        data[indices] = count
+                        values_raw.append(count)
+                        count += 1
+                    values_mapped[d] = data
+
+                else:
+                    data = np.zeros(d.shape()).tolist()
+                    for indices in itertools.product(*[range(s) for s in d.shape()]):
+                        tmp1, tmp2 = cls.build_input_values([d.definition], offset=count)
+                        _data = data
+                        for index in indices[:-1]:
+                            _data = _data[index]
+                        _data[indices[-1]] = tmp1[d.definition]
+                        values_raw.extend(tmp2)
+                        count += len(tmp2)
+                    values_mapped[d] = data
+
+            elif isinstance(d, Struct):
+                tmp1, tmp2 = cls.build_input_values(d.definitions, offset=count)
+                values_mapped[d] = tmp1
+                values_raw.extend(tmp2)
+                count += len(tmp2)
             else:
                 raise RuntimeError()
 
-        return values_mapped, np.array(values_raw, dtype=np.float32)
+        return values_mapped, values_raw
 
-    def test(self):
+    #@unittest.skip("test for development purposes")
+    def test_manually(self):
         buffer_usage = BufferUsage.STORAGE_BUFFER
         buffer_layout = Block.LAYOUT_STD140
         buffer_order = Block.ORDER_ROW_MAJOR
 
-        order = [
+        structA = Struct.of([Vector.ivec2(), Scalar.double()], type_name="structA")
+        structB = Struct.of([Scalar.uint(), Scalar.double()], type_name="structB")
+        structC = Struct.of([structB, Vector.ivec2()], type_name="structC")
+
+        structs = [structA, structB, structC]
+
+        variables = [
             Vector.vec3(),
-            Scalar.float(),
-            Vector.ivec2(),
-            Scalar.float(),
-            Vector.dvec4(),
+            Vector.ivec4(),
+            Array.of(structC, 2),
+            Vector.ivec4(),
             Scalar.uint(),
-            Scalar.uint(),
-            Vector.vec3(),
-            Scalar.uint(),
-            Vector.dvec3(),
-            Vector.vec3(),
+            Array.of(Scalar.double(), (5, 2)),
+            Scalar.int(),
+            Array.of(Vector.vec4(), (2, 3, 4)),
+            Vector.dvec2(),
+            structA
         ]
 
-        container = Block(order, buffer_layout, buffer_order)
+        container = Block(variables, buffer_layout, buffer_order)
+        print container
 
-        glsl = self.build_glsl_program(container, buffer_usage)
-        values, expected = self.build_input_values(container)
+        glsl = self.build_glsl_program(container, structs, buffer_usage)
+        # print glsl
+
+        values, expected = self.build_input_values(container.definitions)
+        expected = np.array(expected, dtype=np.float32)
 
         output = self.run_program(glsl, container.to_bytes(values), expected, usage_input=buffer_usage)
 
         print expected
         print output
-
-        print container
+        print "equal", ((expected - output) == 0).all()
 
 
 class TestMatrixIn(TestByteRepresentation):
@@ -281,6 +377,7 @@ class TestArrayIn(TestByteRepresentation):
         order = [scalar_uint, array_outer, scalar_double]
 
         container = Block(order, layout, matrix_order)
+        print container
 
         values = {
             scalar_uint: 111,
@@ -294,33 +391,10 @@ class TestArrayIn(TestByteRepresentation):
         print size
         print len(bytez)
 
-        # do the stuff
-        session = self.SESSION
-        shader = self.shader_from_txt(glsl)
-
-        buffer_in = self.allocate_buffer(len(bytez), BufferUsage.STORAGE_BUFFER, MemoryType.CPU)
-        buffer_out = self.allocate_buffer(expected.nbytes, BufferUsage.STORAGE_BUFFER, MemoryType.CPU)
-
-        buffer_in.map(bytez)
-
-        pipeline = Pipeline(session.device, shader, [buffer_in, buffer_out])
-        executor = Executor(session.device, pipeline, session.queue_index)
-
-        executor.record(1, 1, 1)
-        executor.execute_and_wait()
-
-        with buffer_out.mapped() as bytebuffer:
-            y = np.frombuffer(bytebuffer[:], dtype=expected.dtype).copy()
-
-        # clean up
-        del executor, pipeline
-        self.destroy_buffer(buffer_in)
-        self.destroy_buffer(buffer_out)
+        y = self.run_program(glsl, bytez, expected)
 
         print expected
         print y
-
-        print container
 
     def test2(self):
         glsl = """
@@ -375,28 +449,7 @@ class TestArrayIn(TestByteRepresentation):
         print size
         print len(bytez)
 
-        # do the stuff
-        session = self.SESSION
-        shader = self.shader_from_txt(glsl)
-
-        buffer_in = self.allocate_buffer(len(bytez), BufferUsage.STORAGE_BUFFER, MemoryType.CPU)
-        buffer_out = self.allocate_buffer(expected.nbytes, BufferUsage.STORAGE_BUFFER, MemoryType.CPU)
-
-        buffer_in.map(bytez)
-
-        pipeline = Pipeline(session.device, shader, [buffer_in, buffer_out])
-        executor = Executor(session.device, pipeline, session.queue_index)
-
-        executor.record(1, 1, 1)
-        executor.execute_and_wait()
-
-        with buffer_out.mapped() as bytebuffer:
-            y = np.frombuffer(bytebuffer[:], dtype=expected.dtype).copy()
-
-        # clean up
-        del executor, pipeline
-        self.destroy_buffer(buffer_in)
-        self.destroy_buffer(buffer_out)
+        y = self.run_program(glsl, bytez, expected)
 
         print expected
         print y
@@ -478,28 +531,7 @@ class TestStructIn(TestByteRepresentation):
         print len(bytez)
         print container
 
-        # do the stuff
-        session = self.SESSION
-        shader = self.shader_from_txt(glsl)
-
-        buffer_in = self.allocate_buffer(len(bytez), BufferUsage.STORAGE_BUFFER, MemoryType.CPU)
-        buffer_out = self.allocate_buffer(expected.nbytes, BufferUsage.STORAGE_BUFFER, MemoryType.CPU)
-
-        buffer_in.map(bytez)
-
-        pipeline = Pipeline(session.device, shader, [buffer_in, buffer_out])
-        executor = Executor(session.device, pipeline, session.queue_index)
-
-        executor.record(1, 1, 1)
-        executor.execute_and_wait()
-
-        with buffer_out.mapped() as bytebuffer:
-            y = np.frombuffer(bytebuffer[:], dtype=expected.dtype).copy()
-
-        # clean up
-        del executor, pipeline
-        self.destroy_buffer(buffer_in)
-        self.destroy_buffer(buffer_out)
+        y = self.run_program(glsl, bytez, expected)
 
         print expected
         print y
@@ -568,7 +600,6 @@ class TestStructIn(TestByteRepresentation):
                 values_array[i].append({scalar_uint: j + 1, scalar_double: j + 0.1, vector: [-j, -j, -j]})
         values = {scalar_uint: 111, array_outer2: values_array}
 
-
         size = container.size()
         bytez = container.to_bytes(values)
 
@@ -576,28 +607,7 @@ class TestStructIn(TestByteRepresentation):
         print len(bytez)
         print container
 
-        # do the stuff
-        session = self.SESSION
-        shader = self.shader_from_txt(glsl)
-
-        buffer_in = self.allocate_buffer(len(bytez), BufferUsage.STORAGE_BUFFER, MemoryType.CPU)
-        buffer_out = self.allocate_buffer(expected.nbytes, BufferUsage.STORAGE_BUFFER, MemoryType.CPU)
-
-        buffer_in.map(bytez)
-
-        pipeline = Pipeline(session.device, shader, [buffer_in, buffer_out])
-        executor = Executor(session.device, pipeline, session.queue_index)
-
-        executor.record(1, 1, 1)
-        executor.execute_and_wait()
-
-        with buffer_out.mapped() as bytebuffer:
-            y = np.frombuffer(bytebuffer[:], dtype=expected.dtype).copy()
-
-        # clean up
-        del executor, pipeline
-        self.destroy_buffer(buffer_in)
-        self.destroy_buffer(buffer_out)
+        y = self.run_program(glsl, bytez, expected)
 
         np.set_printoptions(precision=3, suppress=True)
 

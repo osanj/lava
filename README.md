@@ -16,13 +16,13 @@ numpy + shaders = <3
     - [ ] to shader
     - [ ] from shader
   - [ ] structures
-    - [ ] to shader
+    - [x] to shader
     - [ ] from shader
   - [ ] multi-dimensional arrays
-    - [ ] to shader
+    - [x] to shader
     - [ ] from shader
   - [ ] dynamic length
-- [ ] images / samplers
+- [ ] ~~images / samplers~~ (for now)
 - [ ] push constants
 - [ ] bytecode analysis
   - [ ] bindings (std140/std430, variable?)

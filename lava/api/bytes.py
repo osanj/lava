@@ -344,7 +344,7 @@ class Array(Block):
     def __init__(self, definition, dims, layout, order, name=None):
         super(Array, self).__init__(None, layout, order, name)
         self.definition = definition
-        self.dims = dims if isinstance(dims, (list, tuple)) else [dims]
+        self.dims = tuple(dims) if isinstance(dims, (list, tuple)) else (dims,)
 
         # precompute alignment / stride
         self.a = None
@@ -403,7 +403,7 @@ class Array(Block):
             raise RuntimeError("Incorrect datatype {}, expected {}".format(type(array), np.ndarray))
         # if array.dtype is not self.definition.numpy_dtype():
         #     raise RuntimeError("Incorrect datatype {}, expected {}".format(array.dtype, self.definition.numpy_dtype()))
-        if array.shape != self.shape():
+        if tuple(array.shape) != self.shape():
             raise RuntimeError("Array has shape {}, expected {}".format(array.shape, self.shape()))
 
         p = (self.a - self.definition.alignment()) / self.definition.size()
@@ -419,8 +419,9 @@ class Array(Block):
 
 class Struct(Block):
 
-    def __init__(self, definitions, layout, order, name=None):
+    def __init__(self, definitions, layout, order, name=None, type_name=None):
         super(Struct, self).__init__(definitions, layout, order, name)
+        self.type_name = type_name
 
         # precompute alignment / stride
         self.a = None
@@ -431,8 +432,8 @@ class Struct(Block):
             self.a = max([d.alignment(layout, order) for d in self.definitions])
 
     @classmethod
-    def of(cls, definitions, name=None):
-        return cls(definitions, cls.LAYOUT_DEFAULT, cls.ORDER_DEFAULT, name)
+    def of(cls, definitions, name=None, type_name=None):
+        return cls(definitions, cls.LAYOUT_DEFAULT, cls.ORDER_DEFAULT, name, type_name)
 
     def size(self):
         return super(Struct, self).size()
@@ -448,7 +449,7 @@ class Struct(Block):
         return s
 
     def glsl_dtype(self):
-        return "struct"
+        return self.type_name or "structType?"
 
     def to_bytes(self, values, *args, **kwargs):
         return super(Struct, self).to_bytes(values, *args, **kwargs)
