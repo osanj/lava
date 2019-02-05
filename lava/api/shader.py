@@ -37,38 +37,11 @@ class ByteCode(object):
         self.header = ByteCodeHeader(self.bytez)
         self.instructions = []
 
-        # print bytez
-
         step = self.header.words() * spirv.WORD_BYTE_SIZE
         while step < len(bytez):
             instruction = ByteCodeInstruction(self.bytez[step:])
             self.instructions.append(instruction)
             step += instruction.words() * spirv.WORD_BYTE_SIZE
-
-            idx = instruction.op_id
-
-            if instruction.op is None:
-                print "Op id={} words={}".format(instruction.op_id, instruction.words())
-            else:
-                print instruction.op
-
-
-            # if idx == 5:
-            #     target_id = self.read_word(instruction.bytez, offset=1)
-            #     #a = 2 * spirv.WORD_BYTE_SIZE
-            #     #b = a + (instruction.words() - 2) * spirv.WORD_BYTE_SIZE
-            #     #name = instruction.bytez[a:b].rstrip("\0") or "-1"
-            #     name = instruction.bytez[2 * spirv.WORD_BYTE_SIZE:].rstrip("\0") or "-1"
-            #     print "OpName target_id={} name={}".format(target_id, name)
-
-            # if idx == 6:
-            #     type_id = self.read_word(instruction.bytez, offset=1)
-            #     member_id = self.read_word(instruction.bytez, offset=2)
-            #     name = instruction.bytez[3 * spirv.WORD_BYTE_SIZE:].rstrip("\0") or "-1"
-            #     print "OpMemberName type_id={} member_id={} name={}".format(type_id, member_id, name)
-
-
-        print "done"
 
     @classmethod
     def read_word(cls, bytez, offset=0):
@@ -89,6 +62,42 @@ class ByteCode(object):
         a = offset * spirv.WORD_BYTE_SIZE
         b = len(bytez) if n == -1 else a + n * spirv.WORD_BYTE_SIZE
         return bytez[a:b].rstrip("\0")
+
+    def __str__(self):
+        strings = []
+        for instruction in self.instructions:
+            if instruction.op is None:
+                strings.append("Op id={} words={}".format(instruction.op_id, instruction.words()))
+            else:
+                strings.append(str(instruction.op))
+        return "\n".join(strings)
+
+    def find_instructions(self, operation):
+        results = []
+        for instruction in self.instructions:
+            if instruction.op_id == operation.ID:
+                results.append(instruction)
+        return results
+
+    def find_instructions_with_attributes(self, operation, **attributes):
+        results = self.find_instructions(operation)
+        results_filtered = []
+
+        for instruction in results:
+            matches = 0
+
+            for attr_key, attr_value in attributes.iteritems():
+                if not attr_key in instruction.op.__dict__:
+                    break
+                if instruction.op.__dict__[attr_key] != attr_value:
+                    break
+                matches += 1
+
+            if matches == len(attributes):
+                results_filtered.append(instruction)
+
+        return results_filtered
+
 
 
     # get entry point
@@ -406,8 +415,38 @@ class OpSourceExtension(Op):
         return "extension={}".format(self.extension)
 
 
+class OpTypePointer(Op):
+    # https://www.khronos.org/registry/spir-v/specs/1.2/SPIRV.pdf#OpTypePointer
+    ID = 32
+
+    def __init__(self, bytez):
+        super(OpTypePointer, self).__init__(bytez)
+        self.result_id = ByteCode.read_word(bytez)
+        self.storage_class = spirv.StorageClass.from_spirv(ByteCode.read_word(bytez, offset=1))
+        self.type_id = ByteCode.read_word(bytez, offset=2)
+
+    def describe(self):
+        return "result_id={} storage_class={} type_id={}".format(self.result_id, self.storage_class, self.type_id)
+
+
+class OpVariable(Op):
+    # https://www.khronos.org/registry/spir-v/specs/1.2/SPIRV.pdf#OpVariable
+    ID = 59
+
+    def __init__(self, bytez):
+        super(OpVariable, self).__init__(bytez)
+        self.result_type = ByteCode.read_word(bytez)
+        self.result_id = ByteCode.read_word(bytez, offset=1)
+        self.storage_class = spirv.StorageClass.from_spirv(ByteCode.read_word(bytez, offset=2))
+        # self.initializer = ... (optional)
+
+    def describe(self):
+        return "result_type={} result_id={} storage_class={}".format(self.result_type, self.result_id,
+                                                                     self.storage_class)
+
+
 OPS_REGISTER = {op.ID: op for op in [
     OpName, OpMemberName, OpEntryPoint, OpExecutionMode, OpDecorate, OpMemberDecorate, OpTypeBool, OpTypeInt,
     OpTypeFloat, OpTypeVector, OpTypeMatrix, OpTypeArray, OpTypeRuntimeArray, OpTypeStruct, OpTypeVoid, OpTypeImage,
-    OpTypeSampler, OpSource, OpSourceExtension
+    OpTypeSampler, OpSource, OpSourceExtension, OpTypePointer, OpVariable
 ]}

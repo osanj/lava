@@ -46,6 +46,7 @@ class SourceLanguage(SpirvEnum):
         (UNKNOWN, 0), (ESSL, 1), (GLSL, 2), (OPEN_CL_C, 3), (OPEN_CL_CPP, 4), (HLSL, 5),
     )
 
+
 class ExecutionModel(SpirvEnum):
 
     VERTEX = "VERTEX"
@@ -188,4 +189,28 @@ class Decoration(SpirvEnum):
         (MAX_BYTE_OFFSET, 45), (ALIGNMENT_ID, 46), (MAX_BYTE_OFFSET_ID, 47), (EXPLICIT_INTERP_AMD, 4999),
         (OVERRIDE_COVERAGE_NV, 5248), (PASSTHROUGH_NV, 5250), (VIEWPORT_RELATIVE_NV, 5252),
         (SECONDARY_VIEWPORT_RELATIVE_NV, 5256), (HLSL_COUNTER_BUFFER_GOOGLE, 5634), (HLSL_SEMANTIC_GOOGLE, 5635),
+    )
+
+
+class StorageClass(SpirvEnum):
+    # https://www.khronos.org/registry/spir-v/specs/1.2/SPIRV.pdf#subsection.3.7
+
+    UNIFORM_CONSTANT = "UNIFORM_CONSTANT"
+    INPUT = "INPUT"
+    UNIFORM = "UNIFORM"
+    OUTPUT = "OUTPUT"
+    WORKGROUP = "WORKGROUP"
+    CROSS_WORKGROUP = "CROSS_WORKGROUP"
+    PRIVATE = "PRIVATE"
+    FUNCTION = "FUNCTION"
+    GENERIC = "GENERIC"
+    PUSH_CONSTANT = "PUSH_CONSTANT"
+    ATOMIC_COUNTER = "ATOMIC_COUNTER"
+    IMAGE = "IMAGE"
+    STORAGE_BUFFER = "STORAGE_BUFFER"
+
+    _MAP = (
+        (UNIFORM_CONSTANT, 0), (INPUT, 1), (UNIFORM, 2), (OUTPUT, 3), (WORKGROUP, 4), (CROSS_WORKGROUP, 5),
+        (PRIVATE, 6), (FUNCTION, 7), (GENERIC, 8), (PUSH_CONSTANT, 9), (ATOMIC_COUNTER, 10), (IMAGE, 11),
+        (STORAGE_BUFFER, 12),
     )
