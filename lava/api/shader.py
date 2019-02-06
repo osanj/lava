@@ -1,5 +1,6 @@
 # -*- coding: UTF-8 -*-
 
+import itertools
 import logging
 import struct
 
@@ -31,17 +32,53 @@ class Shader(object):
 class ByteCode(object):
     # https://www.khronos.org/registry/spir-v/specs/1.2/SPIRV.pdf
 
+    TYPE_UINT = "uint"
+    TYPE_INT = "int"
+    TYPE_FLOAT = "float"
+    TYPE_DOUBLE = "double"
+
     def __init__(self, bytez):
         self.bytez = bytearray(bytez)
 
         self.header = ByteCodeHeader(self.bytez)
         self.instructions = []
 
+        # parse instruction by instruction
         step = self.header.words() * spirv.WORD_BYTE_SIZE
         while step < len(bytez):
             instruction = ByteCodeInstruction(self.bytez[step:])
             self.instructions.append(instruction)
             step += instruction.words() * spirv.WORD_BYTE_SIZE
+
+        # recover types
+        self.types_scalar, self.types_vector, self.types_matrix = self.find_basic_types()
+        self.types_array = self.find_array_types()
+        self.types_struct = self.find_struct_types()
+
+        print "scalars"
+        print self.types_scalar
+        print ""
+        print "vectors"
+        print self.types_vector
+        print ""
+        print "matrices"
+        print self.types_matrix
+        print ""
+        print "array"
+        print self.types_array
+        print ""
+        print "struct"
+        print self.types_struct
+        print ""
+        print "names"
+        names = []
+        for idx in self.types_struct:
+            struct_name, member_names = self.find_names(idx)
+            names.append("  {}) {}{{{}}}".format(idx, struct_name, ",".join(member_names)))
+        print "\n".join(names)
+        print ""
+        print "blocks"
+        print self.find_blocks()
 
     @classmethod
     def read_word(cls, bytez, offset=0):
@@ -87,7 +124,7 @@ class ByteCode(object):
             matches = 0
 
             for attr_key, attr_value in attributes.iteritems():
-                if not attr_key in instruction.op.__dict__:
+                if attr_key not in instruction.op.__dict__:
                     break
                 if instruction.op.__dict__[attr_key] != attr_value:
                     break
@@ -98,7 +135,114 @@ class ByteCode(object):
 
         return results_filtered
 
+    def find_basic_types(self):
+        types_scalar = {}
+        types_vector = {}
+        types_matrix = {}
 
+        search_scalar = [
+            (self.TYPE_FLOAT, {"operation": OpTypeFloat, "width": 32}),
+            (self.TYPE_DOUBLE, {"operation": OpTypeFloat, "width": 64}),
+            (self.TYPE_INT, {"operation": OpTypeInt, "width": 32, "signedness": 1}),
+            (self.TYPE_UINT, {"operation": OpTypeInt, "width": 32, "signedness": 0}),
+        ]
+
+        # scalar types are "standalone"
+        for type_scalar, search_data in search_scalar:
+            instructions = self.find_instructions_with_attributes(**search_data)
+            if len(instructions) == 1:
+                types_scalar[instructions[0].op.result_id] = type_scalar
+
+        # vector types reference the scalar types
+        for result_id, n in itertools.product(types_scalar.keys(), range(2, 5)):
+            instructions = self.find_instructions_with_attributes(operation=OpTypeVector, component_type=result_id,
+                                                                  component_count=n)
+            if len(instructions) == 1:
+                types_vector[instructions[0].op.result_id] = (types_scalar[result_id], n)
+
+        # matrix types reference the vector types
+        for result_id, cols in itertools.product(types_vector.keys(), range(2, 5)):
+            instructions = self.find_instructions_with_attributes(operation=OpTypeMatrix, column_type=result_id,
+                                                                  column_count=cols)
+            if len(instructions) == 1:
+                scalar_type, rows = types_vector[result_id]
+                types_matrix[instructions[0].op.result_id] = (scalar_type, rows, cols)
+
+        return types_scalar, types_vector, types_matrix
+
+    def find_array_types(self):
+        types_array = {}
+        tmp = {}
+
+        # find all array types first
+        for instruction in self.find_instructions(OpTypeArray):
+            constants = self.find_instructions_with_attributes(OpConstant, result_id=instruction.op.length)
+            if len(constants) == 1:
+                n = constants[0].op.literals[0]
+                tmp[instruction.op.result_id] = (instruction.op.element_type, [n])
+
+        # collapse them into nd-arrays
+        for idx in sorted(tmp.keys(), reverse=True):
+            if idx in tmp:
+                ref, dims = tmp[idx]
+
+                while ref in tmp:
+                    other_ref, other_dims = tmp[ref]
+                    del tmp[ref]
+                    ref = other_ref
+                    dims += other_dims
+
+                types_array[idx] = (ref, tuple(dims))
+                del tmp[idx]
+
+        return types_array
+
+    def find_struct_types(self):
+        types_struct = {}
+
+        for instruction in self.find_instructions(OpTypeStruct):
+            types_struct[instruction.op.result_id] = instruction.op.member_types
+
+        return types_struct
+
+    def find_names(self, struct_id):
+        struct_name = None
+
+        instructions = self.find_instructions_with_attributes(operation=OpName, target_id=struct_id)
+        if len(instructions) == 1:
+            struct_name = str(instructions[0].op.name)
+
+        instructions = self.find_instructions_with_attributes(operation=OpMemberName, type_id=struct_id)
+        member_names = [str(instruction.op.name) for instruction in instructions]
+
+        return struct_name, member_names
+
+    def find_blocks(self):
+        blocks = {}
+        blocks1 = self.find_instructions_with_attributes(OpDecorate, decoration=spirv.Decoration.BLOCK)  # ubo
+        blocks2 = self.find_instructions_with_attributes(OpDecorate, decoration=spirv.Decoration.BUFFER_BLOCK)  # ssbo
+
+        for candidate in blocks1 + blocks2:
+            # find associated pointer
+            instructions = self.find_instructions_with_attributes(OpTypePointer, type_id=candidate.op.target_id)
+            if len(instructions) != 1:
+                continue
+
+            # find associated variable
+            instructions = self.find_instructions_with_attributes(OpVariable, result_type=instructions[0].op.result_id)
+            if len(instructions) != 1:
+                continue
+            storage_class = instructions[0].op.storage_class
+
+            # find associated binding
+            instructions = self.find_instructions_with_attributes(OpDecorate, target_id=instructions[0].op.result_id,
+                                                                  decoration=spirv.Decoration.BINDING)
+
+            block_type = candidate.op.decoration
+            binding_id = instructions[0].op.literals[0] if len(instructions) == 1 else -1
+            blocks[candidate.op.target_id] = (block_type, storage_class, binding_id)
+
+        return blocks
 
     # get entry point
     # get binding
@@ -445,8 +589,23 @@ class OpVariable(Op):
                                                                      self.storage_class)
 
 
+class OpConstant(Op):
+    # https://www.khronos.org/registry/spir-v/specs/1.2/SPIRV.pdf#OpConstant
+    ID = 43
+
+    def __init__(self, bytez):
+        super(OpConstant, self).__init__(bytez)
+        self.result_type = ByteCode.read_word(bytez)
+        self.result_id = ByteCode.read_word(bytez, offset=1)
+        self.literals = ByteCode.read_words(bytez, offset=2)
+        # self.initializer = ... (optional)
+
+    def describe(self):
+        return "result_type={} result_id={} literals={}".format(self.result_type, self.result_id, self.literals)
+
+
 OPS_REGISTER = {op.ID: op for op in [
     OpName, OpMemberName, OpEntryPoint, OpExecutionMode, OpDecorate, OpMemberDecorate, OpTypeBool, OpTypeInt,
     OpTypeFloat, OpTypeVector, OpTypeMatrix, OpTypeArray, OpTypeRuntimeArray, OpTypeStruct, OpTypeVoid, OpTypeImage,
-    OpTypeSampler, OpSource, OpSourceExtension, OpTypePointer, OpVariable
+    OpTypeSampler, OpSource, OpSourceExtension, OpTypePointer, OpVariable, OpConstant
 ]}

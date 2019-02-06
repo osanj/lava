@@ -56,13 +56,14 @@ class TestByteCodeInspection(unittest.TestCase):
         struct Data2 {
             double var1;
             double var2;
+            Data1 var3;
         };
         
-        //layout(std140, binding = 0) uniform uniIn
-        layout(std430, binding = 0) readonly buffer bufIn
+        layout(std140, binding = 0) uniform uniIn
+        //layout(std430, binding = 0) readonly buffer bufIn
         {
             bool flag2;
-            vec2 abc;
+            vec2[5][2][3] abc;
             //float bufferIn[5];
             bool flag;
             mat4x4 model;
@@ -76,6 +77,7 @@ class TestByteCodeInspection(unittest.TestCase):
             uint width;
             uint height;
             float bufferOut[];
+            uint asd;
         };
         
         void main() {
@@ -89,65 +91,3 @@ class TestByteCodeInspection(unittest.TestCase):
 
         print ""
         print byte_code
-
-        print ""
-        print "struct instructions"
-        struct_instructions = byte_code.find_instructions(OpTypeStruct)
-        for instruction in struct_instructions:
-            print instruction.op
-
-        print ""
-        print "decorations with BLOCK"
-        struct_instructions = byte_code.find_instructions_with_attributes(OpDecorate, decoration=spirv.Decoration.BLOCK)
-        for instruction in struct_instructions:
-            print instruction.op
-
-        print ""
-        print "decorations with BUFFER_BLOCK"
-        struct_instructions = byte_code.find_instructions_with_attributes(OpDecorate, decoration=spirv.Decoration.BUFFER_BLOCK)
-        for instruction in struct_instructions:
-            print instruction.op
-
-        types1 = {}
-        search1 = (
-            ("float", {"operation": OpTypeFloat, "width": 32}),
-            ("double", {"operation": OpTypeFloat, "width": 64}),
-            ("int", {"operation": OpTypeInt, "width": 32, "signedness": 1}),
-            ("uint", {"operation": OpTypeInt, "width": 32, "signedness": 0}),
-        )
-
-        for type_name, search_data in search1:
-            instructions = byte_code.find_instructions_with_attributes(**search_data)
-            if len(instructions) == 0:
-                print "Did not find type {}".format(type_name)
-            elif len(instructions) == 1:
-                types1[instructions[0].op.result_id] = type_name
-            else:
-                print "Found multiple definitions for {}".format(type_name)
-
-        types2 = {}
-        search2 = [((types1[result_id], count), {"operation": OpTypeVector, "component_type": result_id, "component_count": count})
-                   for result_id, count in itertools.product(types1.keys(), range(2, 5))]
-
-        for type_name, search_data in search2:
-            instructions = byte_code.find_instructions_with_attributes(**search_data)
-            if len(instructions) == 0:
-                print "Did not find type {}{}".format(*type_name)
-            elif len(instructions) == 1:
-                types2[instructions[0].op.result_id] = type_name
-            else:
-                print "Found multiple definitions for {}{}".format(*type_name)
-
-
-        print "scalar types", types1
-        print "vector types", types2
-
-
-
-
-
-
-
-
-
-
