@@ -57,8 +57,13 @@ class Shader(object):
         return self.entry_point
 
     def inspect(self):
-        layout = ByteRepresentation.LAYOUT_STD140
-        order = ByteRepresentation.ORDER_COLUMN_MAJOR
+        default_layout = ByteRepresentation.LAYOUT_STD140
+        other_layouts = [ByteRepresentation.LAYOUT_STD430]
+        self.inspect_definitons(default_layout)
+        self.inspect_layouts()
+
+    def inspect_definitons(self, default_layout):
+        default_order = ByteRepresentation.ORDER_COLUMN_MAJOR
 
         self.definitions_scalar = {index: Scalar.of(dtype) for index, dtype in self.byte_code.types_scalar.items()}
         self.definitions_vector = {index: Vector(n, dtype) for index, (dtype, n) in self.byte_code.types_vector.items()}
@@ -82,7 +87,7 @@ class Shader(object):
                 definition = definition or self.definitions_matrix.get(type_index, None)
                 definition = definition or self.definitions_struct.get(type_index, None)
 
-                self.definitions_array[index] = Array(definition, dims, layout, order)
+                self.definitions_array[index] = Array(definition, dims, default_layout)
                 candidates_array.remove(index)
 
             for index in candidates_struct:
@@ -116,10 +121,21 @@ class Shader(object):
                     definitions.append(definition)
 
                 struct_name, member_names = self.byte_code.find_names(index)
-                self.definitions_struct[index] = Struct(definitions, layout, order, member_names=member_names,
+                self.definitions_struct[index] = Struct(definitions, default_layout, member_names=member_names,
                                                         type_name=struct_name)
 
                 candidates_struct.remove(index)
+
+    def inspect_layouts(self, default_layout, other_layouts):
+        bindings = self.get_bindings()
+
+        for binding in bindings:
+            index, usage = self.get_block_index(binding)
+            definition = self.definitions_struct[index]
+
+            while definition.offsets != self.byte_code.find_offsets(index):
+                # try with different layout again
+                pass
 
     def get_bindings(self):
         block_data = self.byte_code.find_blocks()
@@ -130,7 +146,7 @@ class Shader(object):
 
         return list(sorted(bindings))
 
-    def get_block(self, binding):
+    def get_block_index(self, binding):
         block_data = self.byte_code.find_blocks()
 
         for index in block_data:
@@ -144,7 +160,10 @@ class Shader(object):
                 elif block_type == Decoration.BUFFER_BLOCK and storage_class == StorageClass.UNIFORM:
                     usage = BufferUsage.STORAGE_BUFFER
 
-                return self.definitions_struct[index], usage
+                return index, usage
 
         raise ValueError("Binding {} not found".format(binding))
 
+    def get_block(self, binding):
+        index, usage = self.get_block_index(binding)
+        return self.definitions_struct[index], usage

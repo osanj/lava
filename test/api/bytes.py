@@ -277,24 +277,24 @@ void main() {{
     #@unittest.skip("test for development purposes")
     def test_manually(self):
         buffer_usage = BufferUsage.STORAGE_BUFFER
-        buffer_layout = Block.LAYOUT_STD140
-        buffer_order = Block.ORDER_ROW_MAJOR
+        buffer_layout = ByteRepresentation.LAYOUT_STD140
+        buffer_order = ByteRepresentation.ORDER_ROW_MAJOR
 
-        structA = Struct([Vector.ivec2(), Scalar.double()], buffer_layout, buffer_order, member_names=["a", "b"], type_name="structA")
-        structB = Struct([Scalar.uint(), Scalar.double()], buffer_layout, buffer_order, type_name="structB")
-        structC = Struct([structB, Vector.ivec2()], buffer_layout, buffer_order, type_name="structC")
+        structA = Struct([Vector.ivec2(), Scalar.double()], buffer_layout, member_names=["a", "b"], type_name="structA")
+        structB = Struct([Scalar.uint(), Scalar.double()], buffer_layout, type_name="structB")
+        structC = Struct([structB, Vector.ivec2()], buffer_layout, type_name="structC")
 
         structs = [structA, structB, structC]
 
         variables = [
             Vector.vec3(),
             Vector.ivec4(),
-            Array(structC, 2, buffer_layout, buffer_order),
+            Array(structC, 2, buffer_layout),
             Vector.ivec4(),
             Scalar.uint(),
-            Array(Scalar.double(), (5, 2), buffer_layout, buffer_order),
+            Array(Scalar.double(), (5, 2), buffer_layout),
             Scalar.int(),
-            Array(Vector.vec4(), (2, 3, 4), buffer_layout, buffer_order),
+            Array(Vector.vec4(), (2, 3, 4), buffer_layout),
             Vector.dvec2(),
             structA
         ]
@@ -363,8 +363,8 @@ class TestArrayIn(TestByteRepresentation):
                 // array[5] = mat[3][0];
             }
             """
-        layout = Block.LAYOUT_STD140
-        matrix_order = Block.ORDER_ROW_MAJOR
+        layout = ByteRepresentation.LAYOUT_STD140
+        matrix_order = ByteRepresentation.ORDER_ROW_MAJOR
 
         shape = (2, 5)
         expected = np.arange(np.product(shape), dtype=np.float32)
@@ -372,11 +372,11 @@ class TestArrayIn(TestByteRepresentation):
         scalar_uint = Scalar.uint()
         scalar_double = Scalar.double()
 
-        array_outer = Array(Scalar.float(), shape, layout, matrix_order)
+        array_outer = Array(Scalar.float(), shape, layout)
 
         order = [scalar_uint, array_outer, scalar_double]
 
-        container = Block(order, layout, matrix_order)
+        container = Struct(order, layout)
         print container
 
         values = {
@@ -428,16 +428,16 @@ class TestArrayIn(TestByteRepresentation):
                 // array[5] = mat[3][0];
             }
             """
-        layout = Block.LAYOUT_STD430
-        matrix_order = Block.ORDER_ROW_MAJOR
+        layout = ByteRepresentation.LAYOUT_STD430
+        matrix_order = ByteRepresentation.ORDER_ROW_MAJOR
 
         shape = (3, 5, 11)
         expected = np.arange(np.product(shape), dtype=np.float32)
 
-        array = Array(Scalar.float(), shape, layout, matrix_order)
+        array = Array(Scalar.float(), shape, layout)
         order = [array]
 
-        container = Block(order, layout, matrix_order)
+        container = Struct(order, layout)
 
         values = {
             array: expected.reshape(shape)
@@ -498,8 +498,8 @@ class TestStructIn(TestByteRepresentation):
 
             }
             """
-        layout = Block.LAYOUT_STD140
-        matrix_order = Block.ORDER_ROW_MAJOR
+        layout = ByteRepresentation.LAYOUT_STD140
+        matrix_order = ByteRepresentation.ORDER_ROW_MAJOR
 
         expected = np.zeros(12, dtype=np.float32)
 
@@ -507,12 +507,12 @@ class TestStructIn(TestByteRepresentation):
         scalar_double = Scalar.double()
         vector_double3 = Vector.dvec3()
         vector_int2 = Vector.ivec2()
-        array = Array(Scalar.float(), 5, layout, matrix_order)
-        struct = Struct([scalar_double, array, vector_int2], layout, matrix_order)
+        array = Array(Scalar.float(), 5, layout)
+        struct = Struct([scalar_double, array, vector_int2], layout)
 
         order = [scalar_uint, struct, vector_double3]
 
-        container = Block(order, layout, matrix_order)
+        container = Struct(order, layout)
 
         values = {
             scalar_uint: 111,
@@ -574,15 +574,15 @@ class TestStructIn(TestByteRepresentation):
                 
             }
             """
-        layout = Block.LAYOUT_STD140
-        matrix_order = Block.ORDER_ROW_MAJOR
+        layout = ByteRepresentation.LAYOUT_STD140
+        matrix_order = ByteRepresentation.ORDER_ROW_MAJOR
 
         expected = np.zeros(76, dtype=np.float32)
 
         scalar_uint = Scalar.uint()
         scalar_double = Scalar.double()
         vector = Vector.ivec3()
-        struct = Struct([scalar_double, vector, scalar_uint], layout, matrix_order)
+        struct = Struct([scalar_double, vector, scalar_uint], layout)
 
         # array_inner = Array(struct, 5, layout, matrix_order)
         # array_outer = Array(array_inner, 3, layout, matrix_order)
@@ -591,8 +591,8 @@ class TestStructIn(TestByteRepresentation):
         #                 range(array_inner.length())]
         # values = {scalar_uint: 111, array_outer: [values_array for _ in range(array_outer.length())]}
 
-        array_outer2 = Array(struct, (3, 5), layout, matrix_order)
-        container = Block([scalar_uint, array_outer2], layout, matrix_order)
+        array_outer2 = Array(struct, (3, 5), layout)
+        container = Struct([scalar_uint, array_outer2], layout)
         values_array = []
         for i in range(3):
             values_array.append([])

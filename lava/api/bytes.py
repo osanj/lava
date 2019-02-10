@@ -21,6 +21,7 @@ class ByteRepresentation(object):
     LAYOUT_STD140 = "std140"
     LAYOUT_STD430 = "std430"
     LAYOUT_DEFAULT = LAYOUT_STD140
+    LAYOUT_STDXXX = "stdxxx"  # can not be inferred / does not matter
 
     ORDER_COLUMN_MAJOR = "column_major"
     ORDER_ROW_MAJOR = "row_major"
@@ -293,20 +294,28 @@ class Vector(ByteRepresentation):
 
 class Array(ByteRepresentation):
 
-    def __init__(self, definition, dims, layout, order):
+    def __init__(self, definition, dims, layout):
         super(Array, self).__init__()
-        self.layout = layout
-        self.order = order
         self.definition = definition
         self.dims = tuple(dims) if isinstance(dims, (list, tuple)) else (dims,)
+        self.layout = layout  # precomputes alignment
 
-        # precompute alignment / stride
+    @property
+    def layout(self):
+        return self._layout
+
+    @layout.setter
+    def layout(self, layout):
+        self._layout = layout
         self.a = None
-        if layout == self.LAYOUT_STD140:
+        self.precompute_alignment()
+
+    def precompute_alignment(self):
+        if self.layout in [self.LAYOUT_STD140, self.LAYOUT_STD430, self.LAYOUT_STDXXX]:
             self.a = self.definition.alignment()
-            self.a += (16 - self.a % 16) % 16
-        if layout == self.LAYOUT_STD430:
-            self.a = self.definition.alignment()
+
+            if self.layout == self.LAYOUT_STD140:
+                self.a += (16 - self.a % 16) % 16
 
     def shape(self):
         return self.dims
@@ -369,31 +378,46 @@ class Array(ByteRepresentation):
 
 class Struct(ByteRepresentation):
 
-    def __init__(self, definitions, layout, order, member_names=None, type_name=None):
+    def __init__(self, definitions, layout, member_names=None, type_name=None):
         super(Struct, self).__init__()
-        self.layout = layout
-        self.order = order
         self.definitions = definitions
         self.member_names = member_names or ([None] * len(definitions))
         self.type_name = type_name
+        self.layout = layout  # precomputes alignment
 
-        # precompute alignment / stride
+    @property
+    def layout(self):
+        return self._layout
+
+    @layout.setter
+    def layout(self, layout):
+        self._layout = layout
         self.a = None
-        if layout == self.LAYOUT_STD140:
+        self.precompute_alignment()
+
+    def precompute_alignment(self):
+        if self.layout in [self.LAYOUT_STD140, self.LAYOUT_STD430, self.LAYOUT_STDXXX]:
             self.a = max([d.alignment() for d in self.definitions])
-            self.a += (16 - self.a % 16) % 16
-        if layout == self.LAYOUT_STD430:
-            self.a = max([d.alignment() for d in self.definitions])
+
+            if self.layout == self.LAYOUT_STD140:
+                self.a += (16 - self.a % 16) % 16
 
     def size(self):
-        step = 0
+        return self.steps()[-1]
+
+    def offsets(self):
+        return self.steps()[:-1]
+
+    def steps(self):
+        steps = [0]
 
         for d in self.definitions:
-            a = d.alignment(self.layout, self.order)
-            padding = (a - step % a) % a
-            step += padding + d.size()
+            a = d.alignment()
+            padding = (a - steps[-1] % a) % a
+            steps[-1] = steps[-1] + padding  # update last step + size to next step
+            steps.append(steps[-1] + d.size())
 
-        return step
+        return steps
 
     def alignment(self):
         return self.a

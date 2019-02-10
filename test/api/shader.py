@@ -2,6 +2,7 @@
 
 import itertools
 import logging
+import time
 import unittest
 
 from lava.api.bytes import *
@@ -60,8 +61,8 @@ class TestByteCodeInspection(unittest.TestCase):
             Data1 var3;
         };
         
-        layout(std140, binding = 0) uniform uniIn
-        //layout(std430, binding = 0) readonly buffer bufIn
+        //layout(std140, binding = 0) uniform uniIn
+        layout(std430, binding = 0) readonly buffer bufIn
         {
             bool flag2;
             vec2[5][2][3] abc;
@@ -72,12 +73,13 @@ class TestByteCodeInspection(unittest.TestCase):
             Data2 datas2;
         };
         
-        //layout(std140, binding = 1) writeonly buffer bufOut
-        layout(std430, binding = 1) writeonly buffer bufOut
+        layout(std140, binding = 1) writeonly buffer bufOut
+        //layout(std430, binding = 1) writeonly buffer bufOut
         {
             uint width;
             uint height;
-            float bufferOut[];
+            Data2 datas3;
+            float bufferOut[4];
             uint asd;
         };
         
@@ -90,18 +92,31 @@ class TestByteCodeInspection(unittest.TestCase):
 
         shader = self.shader_from_txt(glsl)
 
-        print ""
-        print shader.byte_code
+        t0 = time.time()
+
+        # print ""
+        # print shader.byte_code
 
         shader.inspect()
 
         print ""
         print ""
-        print shader.definitions_scalar
-        print ""
-        print shader.definitions_vector
-        print ""
-        print shader.definitions_array
-        print ""
-        print shader.definitions_struct
-        print ""
+        # print shader.definitions_scalar
+        # print ""
+        # print shader.definitions_vector
+        # print ""
+        # print shader.definitions_array
+        # print ""
+        # print shader.definitions_struct
+        # print ""
+
+        for index in shader.definitions_struct:
+            offsets_byte_code = shader.byte_code.find_offsets(index)
+            offsets_lava = shader.definitions_struct[index].offsets()
+            alignment = shader.definitions_struct[index].alignment()
+
+            print "#" + str(index)
+            print "byte_code", offsets_byte_code
+            print "lava     ", offsets_lava, "({})".format(alignment)
+            print ""
+

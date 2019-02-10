@@ -54,11 +54,13 @@ class ByteCode(object):
         names = []
         for idx in self.types_struct:
             struct_name, member_names = self.find_names(idx)
-            names.append("  {}) {}{{{}}}".format(idx, struct_name, ",".join(member_names)))
+            offsets = self.find_offsets(idx)
+            names.append("  {}) {} {{ {} }}".format(idx, struct_name, ", ".join(["{}({})".format(*x) for x in zip(member_names, offsets)])))
         print "\n".join(names)
         print ""
         print "blocks"
         print self.find_blocks()
+        print ""
 
     @classmethod
     def read_word(cls, bytez, offset=0):
@@ -188,14 +190,24 @@ class ByteCode(object):
     def find_names(self, struct_id):
         struct_name = None
 
-        instructions = self.find_instructions_with_attributes(operation=OpName, target_id=struct_id)
+        instructions = self.find_instructions_with_attributes(OpName, target_id=struct_id)
         if len(instructions) == 1:
             struct_name = instructions[0].op.name
 
-        instructions = self.find_instructions_with_attributes(operation=OpMemberName, type_id=struct_id)
-        member_names = [instruction.op.name for instruction in instructions]
+        instructions = self.find_instructions_with_attributes(OpMemberName, type_id=struct_id)
+        member_names = {instruction.op.member: instruction.op.name for instruction in instructions}
+        return struct_name, [member_names.get(i) for i in range(max(member_names.keys()) + 1)]
 
-        return struct_name, member_names
+    def find_offsets(self, struct_id):
+        offsets = {}
+
+        for instruction in self.find_instructions_with_attributes(OpMemberDecorate, decoration=spirv.Decoration.OFFSET,
+                                                                  type_id=struct_id):
+            member = instruction.op.member
+            offset = instruction.op.literals[0]
+            offsets[member] = offset
+
+        return [offsets.get(i) for i in range(max(offsets.keys()) + 1)]
 
     def find_blocks(self):
         blocks = {}
