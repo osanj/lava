@@ -4,6 +4,7 @@ import itertools
 import logging
 import unittest
 
+from lava.api.bytes import *
 from lava.api.shader import *
 from lava.session import Session
 from lava.util import compile_glsl
@@ -66,7 +67,7 @@ class TestByteCodeInspection(unittest.TestCase):
             vec2[5][2][3] abc;
             //float bufferIn[5];
             bool flag;
-            mat4x4 model;
+            //mat4x4 model;
             Data1[2] datas1;
             Data2 datas2;
         };
@@ -87,7 +88,20 @@ class TestByteCodeInspection(unittest.TestCase):
         }
         """
 
-        byte_code = ByteCode(self.shader_from_txt(glsl).byte_code)
+        shader = self.shader_from_txt(glsl)
 
         print ""
-        print byte_code
+        print shader.byte_code
+
+        shader.inspect()
+
+        print ""
+        print ""
+        print shader.definitions_scalar
+        print ""
+        print shader.definitions_vector
+        print ""
+        print shader.definitions_array
+        print ""
+        print shader.definitions_struct
+        print ""

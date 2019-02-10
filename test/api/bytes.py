@@ -280,26 +280,26 @@ void main() {{
         buffer_layout = Block.LAYOUT_STD140
         buffer_order = Block.ORDER_ROW_MAJOR
 
-        structA = Struct.of([Vector.ivec2(), Scalar.double()], type_name="structA")
-        structB = Struct.of([Scalar.uint(), Scalar.double()], type_name="structB")
-        structC = Struct.of([structB, Vector.ivec2()], type_name="structC")
+        structA = Struct([Vector.ivec2(), Scalar.double()], buffer_layout, buffer_order, member_names=["a", "b"], type_name="structA")
+        structB = Struct([Scalar.uint(), Scalar.double()], buffer_layout, buffer_order, type_name="structB")
+        structC = Struct([structB, Vector.ivec2()], buffer_layout, buffer_order, type_name="structC")
 
         structs = [structA, structB, structC]
 
         variables = [
             Vector.vec3(),
             Vector.ivec4(),
-            Array.of(structC, 2),
+            Array(structC, 2, buffer_layout, buffer_order),
             Vector.ivec4(),
             Scalar.uint(),
-            Array.of(Scalar.double(), (5, 2)),
+            Array(Scalar.double(), (5, 2), buffer_layout, buffer_order),
             Scalar.int(),
-            Array.of(Vector.vec4(), (2, 3, 4)),
+            Array(Vector.vec4(), (2, 3, 4), buffer_layout, buffer_order),
             Vector.dvec2(),
             structA
         ]
 
-        container = Block(variables, buffer_layout, buffer_order)
+        container = Struct(variables, buffer_layout, buffer_order, type_name="block")
         print container
 
         glsl = self.build_glsl_program(container, structs, buffer_usage)

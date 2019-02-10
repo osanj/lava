@@ -32,13 +32,13 @@ class ByteRepresentation(object):
     FLOAT = "float"
     DOUBLE = "double"
 
-    def __init__(self, name=None):
-        self.name = name
+    def __init__(self):
+        pass
 
     def size(self):
         raise NotImplementedError()
 
-    def alignment(self, layout, order):
+    def alignment(self):
         # called 'base alignment' in the specs
         raise NotImplementedError()
 
@@ -51,65 +51,17 @@ class ByteRepresentation(object):
     def glsl_dtype(self):
         raise NotImplementedError()
 
-    def to_bytes(self, values, layout, order):
+    def to_bytes(self, values):
         raise NotImplementedError()
 
     # def from_bytes(self, bytez):
     #     raise NotImplementedError()
 
 
-class Block(ByteRepresentation):
-
-    def __init__(self, definitions, layout, order, name=None):
-        super(Block, self).__init__(name)
-        self.layout = layout
-        self.order = order
-        self.definitions = definitions
-
-    @classmethod
-    def of(cls, *definitions):
-        return cls(definitions, cls.LAYOUT_DEFAULT, cls.ORDER_DEFAULT)
-
-    def size(self):
-        step = 0
-
-        for d in self.definitions:
-            a = d.alignment(self.layout, self.order)
-            padding = (a - step % a) % a
-            step += padding + d.size()
-
-        return step
-
-    def alignment(self, *args, **kwargs):
-        raise RuntimeError()
-
-    def __str__(self, indent=2):
-        s = "block [{}] {{\n".format(self.name or "?")
-        for i, definition in enumerate(self.definitions):
-            s += "{}({}) {}\n".format(" " * indent, i, definition.__str__(indent=indent + 2))
-        s += "{}}}".format(" " * (indent - 2))
-        return s
-
-    def glsl_dtype(self):
-        raise NotImplementedError()
-
-    def to_bytes(self, values, *args, **kwargs):
-        bytez = bytearray()
-        settings = [self.layout, self.order]
-
-        for d in self.definitions:
-            a = d.alignment(*settings)
-            padding = (a - len(bytez) % a) % a
-            bytez += bytearray(padding)
-            bytez += d.to_bytes(values[d], *settings)
-
-        return bytez
-
-
 class Scalar(ByteRepresentation):
 
-    def __init__(self, input_dtypes, name=None):
-        super(Scalar, self).__init__(name)
+    def __init__(self, input_dtypes):
+        super(Scalar, self).__init__()
         self.input_dtypes = input_dtypes
 
     @classmethod
@@ -129,28 +81,28 @@ class Scalar(ByteRepresentation):
         return cls.of(Scalar.DOUBLE)
 
     @classmethod
-    def of(cls, dtype, name=None):
+    def of(cls, dtype):
         if dtype == cls.INT:
-            return ScalarInt(name)
+            return ScalarInt()
         if dtype == cls.UINT:
-            return ScalarUnsignedInt(name)
+            return ScalarUnsignedInt()
         if dtype == cls.FLOAT:
-            return ScalarFloat(name)
+            return ScalarFloat()
         if dtype == cls.DOUBLE:
-            return ScalarDouble(name)
+            return ScalarDouble()
         raise RuntimeError("Unknown scalar type '{}'".format(dtype))
 
-    def alignment(self,  *args, **kwargs):
+    def alignment(self):
         # "A scalar of size N has a base alignment of N."
         return self.size()
 
-    def __str__(self, indent=2):
-        return "{} [{}]".format(self.glsl_dtype(), self.name or "?")
+    def __str__(self, name=None, indent=2):
+        return "{} [{}]".format(self.glsl_dtype(), name or "?")
 
     def glsl_dtype(self):
         raise NotImplementedError()
 
-    def to_bytes(self, value, *args, **kwargs):
+    def to_bytes(self, value):
         if not isinstance(value, self.input_dtypes):
             raise RuntimeError("{} got dtype {} (expects one of the following {})".format(
                 self.__class__.__name__, type(value), self.input_dtypes
@@ -162,8 +114,8 @@ class Scalar(ByteRepresentation):
 
 class ScalarInt(Scalar):
 
-    def __init__(self, name=None):
-        super(ScalarInt, self).__init__((int, np.int32), name)
+    def __init__(self):
+        super(ScalarInt, self).__init__((int, np.int32))
 
     def numpy_dtype(self):
         return np.int32
@@ -174,7 +126,7 @@ class ScalarInt(Scalar):
     def glsl_dtype(self):
         return "int"
 
-    def to_bytes(self, value, *args, **kwargs):
+    def to_bytes(self, value):
         super(ScalarInt, self).to_bytes(value)
         if type(value) is int:
             if not (-(0x7FFFFFFF + 1) <= value <= 0x7FFFFFFF):
@@ -185,8 +137,8 @@ class ScalarInt(Scalar):
 
 class ScalarUnsignedInt(Scalar):
 
-    def __init__(self, name=None):
-        super(ScalarUnsignedInt, self).__init__((int, np.uint32), name)
+    def __init__(self):
+        super(ScalarUnsignedInt, self).__init__((int, np.uint32))
 
     def numpy_dtype(self):
         return np.uint32
@@ -197,7 +149,7 @@ class ScalarUnsignedInt(Scalar):
     def glsl_dtype(self):
         return "uint"
 
-    def to_bytes(self, value, *args, **kwargs):
+    def to_bytes(self, value):
         super(ScalarUnsignedInt, self).to_bytes(value)
         if type(value) is int:
             if not (0 <= value <= 0xFFFFFFFF):
@@ -208,8 +160,8 @@ class ScalarUnsignedInt(Scalar):
 
 class ScalarFloat(Scalar):
 
-    def __init__(self, name=None):
-        super(ScalarFloat, self).__init__((float, np.float32), name)
+    def __init__(self):
+        super(ScalarFloat, self).__init__((float, np.float32))
 
     def numpy_dtype(self):
         return np.float32
@@ -220,7 +172,7 @@ class ScalarFloat(Scalar):
     def glsl_dtype(self):
         return "float"
 
-    def to_bytes(self, value, *args, **kwargs):
+    def to_bytes(self, value):
         super(ScalarFloat, self).to_bytes(value)
         if type(value) is float:
             # TODO: add range check
@@ -230,8 +182,8 @@ class ScalarFloat(Scalar):
 
 class ScalarDouble(Scalar):
 
-    def __init__(self, name=None):
-        super(ScalarDouble, self).__init__((float, np.float64), name)
+    def __init__(self):
+        super(ScalarDouble, self).__init__((float, np.float64))
 
     def numpy_dtype(self):
         return np.float64
@@ -242,7 +194,7 @@ class ScalarDouble(Scalar):
     def glsl_dtype(self):
         return "double"
 
-    def to_bytes(self, value, *args, **kwargs):
+    def to_bytes(self, value):
         super(ScalarDouble, self).to_bytes(value)
         if type(value) is float:
             # TODO: add range check
@@ -252,58 +204,58 @@ class ScalarDouble(Scalar):
 
 class Vector(ByteRepresentation):
 
-    def __init__(self, n=4, dtype=ByteRepresentation.FLOAT, name=None):
-        super(Vector, self).__init__(name)
+    def __init__(self, n=4, dtype=ByteRepresentation.FLOAT):
+        super(Vector, self).__init__()
         self.dtype = dtype
         self.n = n
         self.scalar = Scalar.of(dtype)
 
     @classmethod
-    def ivec2(cls, name=None):
-        return Vector(2, cls.INT, name)
+    def ivec2(cls):
+        return Vector(2, cls.INT)
 
     @classmethod
-    def ivec3(cls, name=None):
-        return Vector(3, cls.INT, name)
+    def ivec3(cls):
+        return Vector(3, cls.INT)
 
     @classmethod
-    def ivec4(cls, name=None):
-        return Vector(4, cls.INT, name)
+    def ivec4(cls):
+        return Vector(4, cls.INT)
 
     @classmethod
-    def uvec2(cls, name=None):
-        return Vector(2, cls.UINT, name)
+    def uvec2(cls):
+        return Vector(2, cls.UINT)
 
     @classmethod
-    def uvec3(cls, name=None):
-        return Vector(3, cls.UINT, name)
+    def uvec3(cls):
+        return Vector(3, cls.UINT)
 
     @classmethod
-    def uvec4(cls, name=None):
-        return Vector(4, cls.UINT, name)
+    def uvec4(cls):
+        return Vector(4, cls.UINT)
 
     @classmethod
-    def vec2(cls, name=None):
-        return Vector(2, cls.FLOAT, name)
+    def vec2(cls):
+        return Vector(2, cls.FLOAT)
 
     @classmethod
-    def vec3(cls, name=None):
-        return Vector(3, cls.FLOAT, name)
+    def vec3(cls):
+        return Vector(3, cls.FLOAT)
 
     @classmethod
-    def vec4(cls, name=None):
-        return Vector(4, cls.FLOAT, name)
+    def vec4(cls):
+        return Vector(4, cls.FLOAT)
 
     @classmethod
-    def dvec2(cls, name=None):
-        return Vector(2, cls.DOUBLE, name)
+    def dvec2(cls):
+        return Vector(2, cls.DOUBLE)
 
     @classmethod
-    def dvec3(cls, name=None):
+    def dvec3(cls):
         return Vector(3, cls.DOUBLE)
 
     @classmethod
-    def dvec4(cls, name=None):
+    def dvec4(cls):
         return Vector(4, cls.DOUBLE)
 
     def size(self):
@@ -312,7 +264,7 @@ class Vector(ByteRepresentation):
     def length(self):
         return self.n
 
-    def alignment(self,  *args, **kwargs):
+    def alignment(self):
         if self.n == 2:
             # "A two-component vector, with components of size N, has a base alignment of 2 N."
             return self.scalar.size() * 2
@@ -321,13 +273,13 @@ class Vector(ByteRepresentation):
             return self.scalar.size() * 4
         return -1
 
-    def __str__(self, indent=2):
-        return "{} [{}]".format(self.glsl_dtype(), self.name or "?")
+    def __str__(self, name=None, indent=2):
+        return "{} [{}]".format(self.glsl_dtype(), name or "?")
 
     def glsl_dtype(self):
         return "{}vec{}".format(self.dtype.lower()[0] if self.dtype is not self.FLOAT else "", self.n)
 
-    def to_bytes(self, array, *args, **kwargs):
+    def to_bytes(self, array):
         if len(array) != self.n:
             raise RuntimeError("Array as length {}, expected {}".format(len(array), self.n))
 
@@ -339,24 +291,22 @@ class Vector(ByteRepresentation):
         return bytez
 
 
-class Array(Block):
+class Array(ByteRepresentation):
 
-    def __init__(self, definition, dims, layout, order, name=None):
-        super(Array, self).__init__(None, layout, order, name)
+    def __init__(self, definition, dims, layout, order):
+        super(Array, self).__init__()
+        self.layout = layout
+        self.order = order
         self.definition = definition
         self.dims = tuple(dims) if isinstance(dims, (list, tuple)) else (dims,)
 
         # precompute alignment / stride
         self.a = None
         if layout == self.LAYOUT_STD140:
-            self.a = self.definition.alignment(layout, order)
+            self.a = self.definition.alignment()
             self.a += (16 - self.a % 16) % 16
         if layout == self.LAYOUT_STD430:
-            self.a = self.definition.alignment(layout, order)
-
-    @classmethod
-    def of(cls, definition, dims, name=None):
-        return cls(definition, dims, cls.LAYOUT_DEFAULT, cls.ORDER_DEFAULT, name)
+            self.a = self.definition.alignment()
 
     def shape(self):
         return self.dims
@@ -366,21 +316,21 @@ class Array(Block):
         s += (self.a - s % self.a) % self.a  # pad to array stride
         return s * np.product(self.dims)
 
-    def alignment(self, layout, order):
+    def alignment(self):
         return self.a
 
-    def __str__(self, indent=2):
-        s = "array"
+    def __str__(self, name=None, indent=2):
+        s = self.definition.glsl_dtype()  #"array"
         s += ("[{}]" * len(self.shape())).format(*self.dims)
-        s += " [{}] {{ {} }}".format(self.name or "?", self.definition.__str__(indent=indent + 2))
+        s += " [{}] {{ {} }}".format(name or "?", self.definition.__str__(indent=indent + 2))
         return s
 
     def glsl_dtype(self):
         return ("{}" + "[{}]" * len(self.shape())).format(self.definition.glsl_dtype(), *self.dims)
 
-    def to_bytes(self, values, *args, **kwargs):
+    def to_bytes(self, values):
         if isinstance(self.definition, Scalar):
-            return self.to_bytes_for_scalars(values, *args, **kwargs)
+            return self.to_bytes_for_scalars(values)
         else:
             bytez = bytearray()
 
@@ -417,42 +367,58 @@ class Array(Block):
         return array_padded.tobytes()
 
 
-class Struct(Block):
+class Struct(ByteRepresentation):
 
-    def __init__(self, definitions, layout, order, name=None, type_name=None):
-        super(Struct, self).__init__(definitions, layout, order, name)
+    def __init__(self, definitions, layout, order, member_names=None, type_name=None):
+        super(Struct, self).__init__()
+        self.layout = layout
+        self.order = order
+        self.definitions = definitions
+        self.member_names = member_names or ([None] * len(definitions))
         self.type_name = type_name
 
         # precompute alignment / stride
         self.a = None
         if layout == self.LAYOUT_STD140:
-            self.a = max([d.alignment(layout, order) for d in self.definitions])
+            self.a = max([d.alignment() for d in self.definitions])
             self.a += (16 - self.a % 16) % 16
         if layout == self.LAYOUT_STD430:
-            self.a = max([d.alignment(layout, order) for d in self.definitions])
-
-    @classmethod
-    def of(cls, definitions, name=None, type_name=None):
-        return cls(definitions, cls.LAYOUT_DEFAULT, cls.ORDER_DEFAULT, name, type_name)
+            self.a = max([d.alignment() for d in self.definitions])
 
     def size(self):
-        return super(Struct, self).size()
+        step = 0
 
-    def alignment(self, layout, order):
+        for d in self.definitions:
+            a = d.alignment(self.layout, self.order)
+            padding = (a - step % a) % a
+            step += padding + d.size()
+
+        return step
+
+    def alignment(self):
         return self.a
 
-    def __str__(self, indent=2):
-        s = "struct [{}] {{\n".format(self.name or "?")
-        for i, definition in enumerate(self.definitions):
-            s += "{}({}) {}\n".format(" " * indent, i, definition.__str__(indent=indent + 2))
+    def __str__(self, name=None, indent=2):
+        # s = "struct [{}] {{\n".format(name or "?")
+        s = "{} [{}] {{\n".format(self.type_name or "<struct_type>", name or "?")
+        for i, (definition, member_name) in enumerate(zip(self.definitions, self.member_names)):
+            s += "{}({}) {}\n".format(" " * indent, i, definition.__str__(name=member_name, indent=indent + 2))
         s += "{}}}".format(" " * (indent - 2))
         return s
 
     def glsl_dtype(self):
         return self.type_name or "structType?"
 
-    def to_bytes(self, values, *args, **kwargs):
-        return super(Struct, self).to_bytes(values, *args, **kwargs)
+    def to_bytes(self, values):
+        bytez = bytearray()
+
+        for d in self.definitions:
+            a = d.alignment()
+            padding = (a - len(bytez) % a) % a
+            bytez += bytearray(padding)
+            bytez += d.to_bytes(values[d])
+
+        return bytez
 
 
 
