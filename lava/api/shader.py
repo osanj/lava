@@ -57,12 +57,11 @@ class Shader(object):
         return self.entry_point
 
     def inspect(self):
-        default_layout = ByteRepresentation.LAYOUT_STD140
-        other_layouts = [ByteRepresentation.LAYOUT_STD430]
-        self.inspect_definitons(default_layout)
+        self.inspect_definitons()
         self.inspect_layouts()
 
-    def inspect_definitons(self, default_layout):
+    def inspect_definitons(self):
+        default_layout = ByteRepresentation.LAYOUT_STD140
         default_order = ByteRepresentation.ORDER_COLUMN_MAJOR
 
         self.definitions_scalar = {index: Scalar.of(dtype) for index, dtype in self.byte_code.types_scalar.items()}
@@ -126,16 +125,64 @@ class Shader(object):
 
                 candidates_struct.remove(index)
 
-    def inspect_layouts(self, default_layout, other_layouts):
+    def inspect_layouts(self):
         bindings = self.get_bindings()
 
         for binding in bindings:
             index, usage = self.get_block_index(binding)
             definition = self.definitions_struct[index]
 
-            while definition.offsets != self.byte_code.find_offsets(index):
-                # try with different layout again
-                pass
+            print ""
+            print ""
+            print "binding", binding
+            print "index", index
+            print definition
+            print ""
+
+            offsets_bytecode = self.byte_code.find_offsets(index)
+
+            self.set_layout(index, ByteRepresentation.LAYOUT_STD140)
+            offsets_std140 = definition.offsets()
+            match_std140 = offsets_bytecode == definition.offsets()
+
+            self.set_layout(index, ByteRepresentation.LAYOUT_STD430)
+            offsets_std430 = definition.offsets()
+            match_std430 = offsets_bytecode == definition.offsets()
+
+            if match_std140 and not match_std430:
+                self.set_layout(index, ByteRepresentation.LAYOUT_STD140)
+            elif not match_std140 and match_std430:
+                self.set_layout(index, ByteRepresentation.LAYOUT_STD430)
+            elif match_std140 and match_std430:
+                self.set_layout(index, ByteRepresentation.LAYOUT_STDXXX)
+            else:
+                print "bytecode", offsets_bytecode
+                print "std140  ", offsets_std140
+                print "std430  ", offsets_std430
+                raise RuntimeError("Found unexpected memory offsets")
+
+            print index, definition.layout
+
+    def set_layout(self, index, layout):
+        if index in self.definitions_struct:
+            member_indices = self.byte_code.types_struct[index]
+
+            for member_index in member_indices:
+                if member_index in self.byte_code.types_struct or member_index in self.byte_code.types_array:
+                    self.set_layout(member_index, layout)
+
+            self.definitions_struct[index].layout = layout  # set after setting children!
+
+        elif index in self.definitions_array:
+            type_index, _ = self.byte_code.types_array[index]
+
+            if type_index in self.byte_code.types_struct:
+                self.set_layout(type_index, layout)
+
+            self.definitions_array[index].layout = layout  # set after setting children!s
+
+        else:
+            raise RuntimeError()
 
     def get_bindings(self):
         block_data = self.byte_code.find_blocks()
