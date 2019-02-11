@@ -314,6 +314,41 @@ void main() {{
         print output
         print "equal", ((expected - output) == 0).all()
 
+    def test_manually2(self):
+        # buffer padding test
+        buffer_usage = BufferUsage.STORAGE_BUFFER
+        buffer_layout = ByteRepresentation.LAYOUT_STD430
+        buffer_order = ByteRepresentation.ORDER_ROW_MAJOR
+
+        struct1 = Struct([Vector.vec3(), Vector.ivec2()], buffer_layout, type_name="structB")
+        struct2 = Struct([Scalar.double(), Scalar.double(), struct1], buffer_layout, type_name="structC")
+
+        structs = [struct1, struct2]
+
+        variables = [
+            Scalar.uint(),
+            Array(Vector.vec2(), (5, 2, 3), buffer_layout),
+            Array(Scalar.float(), 5, buffer_layout),
+            struct2,  # this struct needs padding at the end
+            Scalar.uint(),
+            Array(struct1, 2, buffer_layout)
+        ]
+
+        container = Struct(variables, buffer_layout, buffer_order, type_name="block")
+        print container
+
+        glsl = self.build_glsl_program(container, structs, buffer_usage)
+        # print glsl
+
+        values, expected = self.build_input_values(container.definitions)
+        expected = np.array(expected, dtype=np.float32)
+
+        output = self.run_program(glsl, container.to_bytes(values), expected, usage_input=buffer_usage)
+
+        print expected
+        print output
+        print "equal", ((expected - output) == 0).all()
+
 
 class TestMatrixIn(TestByteRepresentation):
 

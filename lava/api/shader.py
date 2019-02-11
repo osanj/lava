@@ -132,21 +132,12 @@ class Shader(object):
             index, usage = self.get_block_index(binding)
             definition = self.definitions_struct[index]
 
-            print ""
-            print ""
-            print "binding", binding
-            print "index", index
-            print definition
-            print ""
-
             offsets_bytecode = self.byte_code.find_offsets(index)
 
             self.set_layout(index, ByteRepresentation.LAYOUT_STD140)
-            offsets_std140 = definition.offsets()
             match_std140 = offsets_bytecode == definition.offsets()
 
             self.set_layout(index, ByteRepresentation.LAYOUT_STD430)
-            offsets_std430 = definition.offsets()
             match_std430 = offsets_bytecode == definition.offsets()
 
             if match_std140 and not match_std430:
@@ -156,12 +147,7 @@ class Shader(object):
             elif match_std140 and match_std430:
                 self.set_layout(index, ByteRepresentation.LAYOUT_STDXXX)
             else:
-                print "bytecode", offsets_bytecode
-                print "std140  ", offsets_std140
-                print "std430  ", offsets_std430
                 raise RuntimeError("Found unexpected memory offsets")
-
-            print index, definition.layout
 
     def set_layout(self, index, layout):
         if index in self.definitions_struct:

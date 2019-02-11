@@ -119,3 +119,7 @@ class TestByteCodeInspection(unittest.TestCase):
         #     print offsets_byte_code == offsets_lava
         #     print ""
 
+
+# tests:
+#  struct used in multiple blocks with different layouts
+#  different amount of blocks

@@ -22,12 +22,13 @@ numpy + shaders = <3
     - [x] to shader
     - [ ] from shader
   - [ ] dynamic length
-- [ ] ~~images / samplers~~ (for now)
+- [ ] ~~images / samplers~~ (not for now)
 - [ ] push constants
 - [ ] bytecode analysis
-  - [ ] bindings (std140/std430, variable?)
+  - [x] bindings
   - [x] local groups (?)
   - [x] misc (glsl version, entry point)
+  - [ ] parse type tree
 - [ ] pipelines
   - [ ] oneshot
   - [ ] synchronization based on dependency graph
@@ -64,3 +65,7 @@ numpy + shaders = <3
   * basically all information from the bindings is stored in the bytecode (and can be used to check user input)
   * only thing missing is the layout (std140, std430)
  
+* 07.02.2019
+  * the bytecode contains offsets which can be used to check the offsets which are computed when transferring data to/from the gpu
+  * this way the layout specified by the user can be confirmed
+  * ideally the layout can be deduced at some point
