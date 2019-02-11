@@ -299,7 +299,7 @@ void main() {{
             structA
         ]
 
-        container = Struct(variables, buffer_layout, buffer_order, type_name="block")
+        container = Struct(variables, buffer_layout, type_name="block")
         print container
 
         glsl = self.build_glsl_program(container, structs, buffer_usage)
@@ -334,7 +334,7 @@ void main() {{
             Array(struct1, 2, buffer_layout)
         ]
 
-        container = Struct(variables, buffer_layout, buffer_order, type_name="block")
+        container = Struct(variables, buffer_layout, type_name="block")
         print container
 
         glsl = self.build_glsl_program(container, structs, buffer_usage)

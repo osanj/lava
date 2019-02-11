@@ -52,6 +52,32 @@ class ByteRepresentation(object):
     def glsl_dtype(self):
         raise NotImplementedError()
 
+    @classmethod
+    def compare_type(cls, type_expected, type_other, path, quiet=True):
+        if type_expected != type_other:
+            if not quiet:
+                raise RuntimeError(
+                    "Expected type {}, but got type {} at {}".format(type_expected, type_other, ">".join(path)))
+            return False
+
+        return True
+
+    @classmethod
+    def compare_layout(cls, layout_expected, layout_other, path, quiet=True):
+        if layout_expected == cls.LAYOUT_STDXXX:
+            return True
+
+        if layout_expected != layout_other and layout_other != cls.LAYOUT_STDXXX:
+            if not quiet:
+                raise RuntimeError(
+                    "Expected layout {}, but got layout {} at {}".format(layout_expected, layout_other, " > ".join(path)))
+            return False
+
+        return True
+
+    def compare(self, other, path, quiet=True):
+        raise NotImplementedError()
+
     def to_bytes(self, values):
         raise NotImplementedError()
 
@@ -102,6 +128,9 @@ class Scalar(ByteRepresentation):
 
     def glsl_dtype(self):
         raise NotImplementedError()
+
+    def compare(self, other, path=(), quiet=True):
+        return self.compare_type(type(self), type(other), path, quiet)
 
     def to_bytes(self, value):
         if not isinstance(value, self.input_dtypes):
@@ -280,6 +309,22 @@ class Vector(ByteRepresentation):
     def glsl_dtype(self):
         return "{}vec{}".format(self.dtype.lower()[0] if self.dtype is not self.FLOAT else "", self.n)
 
+    def compare(self, other, path=(), quiet=True):
+        if not self.compare_type(type(self), type(other), path, quiet):
+            return False
+
+        count_expected = self.n
+        count_other = other.n
+
+        if count_expected != count_other:
+            if not quiet:
+                raise RuntimeError("Expected vector length {}, but got length {} at {}".format(count_expected,
+                                                                                               count_other,
+                                                                                               " > ".join(path)))
+            return False
+
+        return True
+
     def to_bytes(self, array):
         if len(array) != self.n:
             raise RuntimeError("Array as length {}, expected {}".format(len(array), self.n))
@@ -329,13 +374,32 @@ class Array(ByteRepresentation):
         return self.a
 
     def __str__(self, name=None, indent=2):
-        s = self.definition.glsl_dtype()  #"array"
+        s = self.definition.glsl_dtype()  # "array"
         s += ("[{}]" * len(self.shape())).format(*self.dims)
         s += " [{}] {{ {} }}".format(name or "?", self.definition.__str__(indent=indent + 2))
         return s
 
     def glsl_dtype(self):
         return ("{}" + "[{}]" * len(self.shape())).format(self.definition.glsl_dtype(), *self.dims)
+
+    def compare(self, other, path=(), quiet=True):
+        if not self.compare_type(type(self), type(other), path, quiet):
+            return False
+        if not self.compare_layout(self.layout, other.layout, path, quiet):
+            return False
+
+        shape_expected = self.shape()
+        shape_other = other.shape()
+
+        if shape_expected != shape_other:
+            if not quiet:
+                raise RuntimeError("Expected array shape {}, but got shape {} at {}".format(shape_expected, shape_other,
+                                                                                            " > ".join(path)))
+            return False
+
+        return self.definition.compare(other.definition,
+                                       list(path) + ["array {}".format("x".join(map(str, shape_expected)))],
+                                       quiet)
 
     def to_bytes(self, values):
         if isinstance(self.definition, Scalar):
@@ -434,6 +498,28 @@ class Struct(ByteRepresentation):
 
     def glsl_dtype(self):
         return self.type_name or "structType?"
+
+    def compare(self, other, path=(), quiet=True):
+        if not self.compare_type(type(self), type(other), path, quiet):
+            return False
+        if not self.compare_layout(self.layout, other.layout, path, quiet):
+            return False
+
+        definitions_expected = self.definitions
+        definitions_other = other.definitions
+
+        if len(definitions_expected) != len(definitions_other):
+            if not quiet:
+                raise RuntimeError("Expected {} members, but got {} members at {}".format(len(definitions_expected),
+                                                                                          len(definitions_other),
+                                                                                          " > ".join(path)))
+            return False
+
+        for i, (definition_expected, definition_other) in enumerate(zip(definitions_expected, definitions_other)):
+            if not definition_expected.compare(definition_other, list(path) + ["member {}".format(i)], quiet):
+                return False
+
+        return True
 
     def to_bytes(self, values):
         bytez = bytearray()

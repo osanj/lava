@@ -67,7 +67,7 @@ class TestByteCodeInspection(unittest.TestCase):
             bool flag2;
             vec2[5][2][3] abc;
             float bufferIn[5];
-            bool flag;
+            //bool flag;
             //mat4x4 model;
             Data1[2] datas1;
             Data2 datas2;
@@ -97,8 +97,8 @@ class TestByteCodeInspection(unittest.TestCase):
 
         shader.inspect()
 
-        print ""
-        print ""
+        print shader.byte_code
+
         # print shader.definitions_scalar
         # print ""
         # print shader.definitions_vector
@@ -118,6 +118,60 @@ class TestByteCodeInspection(unittest.TestCase):
         #     print "lava     ", offsets_lava, "({})".format(alignment)
         #     print offsets_byte_code == offsets_lava
         #     print ""
+
+    def test2(self):
+        glsl = """
+        #version 450
+        #extension GL_ARB_separate_shader_objects : enable
+
+        layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
+        //layout(local_size_x=100, local_size_y=1, local_size_z=1) in;
+
+        struct Data1 {
+            vec3 var1;
+            ivec2 var2;
+        };
+
+        layout(std140, binding = 0) uniform uniIn
+        //layout(std430, binding = 0) readonly buffer bufIn
+        {
+            float varIn1;
+            vec2[5][2][3] varIn2;
+            Data1[2] varIn3;
+            double varIn4;
+        };
+
+        void main() {
+            uint index = gl_GlobalInvocationID.x;
+            //bufferOut[index] = bufferIn[index] + 1;
+        }
+        """
+
+        shader = self.shader_from_txt(glsl)
+
+        shader.inspect()
+
+        print ""
+        print ""
+
+        buffer_layout = ByteRepresentation.LAYOUT_STD140
+
+        # struct1 = Struct([Vector.vec3(), Vector.ivec2()], buffer_layout, type_name="structB")
+        struct1 = Struct([Vector.vec3(), Vector.ivec3()], buffer_layout, type_name="structB")
+
+        variables = [
+            Scalar.float(),
+            Array(Vector.vec2(), (5, 2, 3), buffer_layout),
+            Array(struct1, 2, buffer_layout),
+            Scalar.double()
+        ]
+
+        block_manual = Struct(variables, buffer_layout, type_name="block")
+
+        block, _ = shader.get_block(0)
+
+        res = block.compare(block_manual, quiet=False)
+        print res
 
 
 # tests:
