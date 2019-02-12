@@ -414,7 +414,8 @@ class Array(ByteRepresentation):
 
             return bytez
 
-    def iterate_over_nd_array(self, array, dims):
+    @classmethod
+    def iterate_over_nd_array(cls, array, dims):
         for indices in itertools.product(*[range(d) for d in dims]):
             value = array
             for idx in indices:
@@ -535,8 +536,81 @@ class Struct(ByteRepresentation):
         return bytez
 
 
+class ByteCache(object):
 
+    def __init__(self, definition):
+        if type(definition) != Struct:
+            raise RuntimeError("ByteCaches can only be initialized with struct definitions")
+        self.definition = definition
+        self.values = {}
 
+        for i, d in enumerate(self.definition.definitions):
+            value = None
+
+            if isinstance(d, Struct):
+                value = ByteCache(d)
+
+            if isinstance(d, Array):
+                if isinstance(d.definition, Struct):
+                    value = np.zeros(d.shape()).tolist()
+
+                    for indices in itertools.product(*[range(s) for s in d.shape()]):
+                        _data = value
+                        for index in indices[:-1]:
+                            _data = _data[index]
+                        _data[indices[-1]] = ByteCache(d.definition)
+
+            self.values[d] = value
+
+    def get_as_dict(self):
+        data = {}
+
+        for d in self.definition.definitions:
+            value = self.values[d]
+
+            if isinstance(d, Struct):
+                value = self.values[d].get_as_dict()
+
+            if isinstance(d, Array):
+                if isinstance(d.definition, Struct):
+                    value = np.zeros(d.shape()).tolist()
+
+                    for indices in itertools.product(*[range(s) for s in d.shape()]):
+                        _data1 = value
+                        _data2 = self.values[d]
+
+                        for index in indices[:-1]:
+                            _data1 = _data1[index]
+                            _data2 = _data2[index]
+
+                        _data1[indices[-1]] = _data2[indices[-1]].get_as_dict()
+
+            data[d] = value
+
+        return data
+
+    def set_from_dict(self, values):
+        pass
+
+    def __str__(self):
+        s = self.__class__.__name__ + " around\n"
+        s += str(self.definition)
+        return s
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return self.values[self.definition.definitions[key]]
+
+        if isinstance(key, str):
+            if key not in self.definition.member_names:
+                pass
+            index = self.definition.member_names.index(key)
+            return self.values[self.definition.definitions[index]]
+
+        raise RuntimeError("Invalid key")
+
+    def __setitem__(self, key, value):
+        pass
 
 
 class Matrix(ByteRepresentation):
