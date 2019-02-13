@@ -5,8 +5,8 @@ import logging
 import vulkan as vk
 
 from lava.api.bytecode import ByteCode
-from lava.api.bytes import Array, ByteRepresentation, Scalar, Struct, Vector
-from lava.api.constants.spirv import Decoration, StorageClass, ExecutionModel
+from lava.api.bytes import Array, Scalar, Struct, Vector
+from lava.api.constants.spirv import Decoration, ExecutionModel, Layout, Order, StorageClass
 from lava.api.constants.vk import BufferUsage
 
 logger = logging.getLogger(__name__)
@@ -61,8 +61,8 @@ class Shader(object):
         self.inspect_layouts()
 
     def inspect_definitons(self):
-        default_layout = ByteRepresentation.LAYOUT_STD140
-        default_order = ByteRepresentation.ORDER_COLUMN_MAJOR
+        default_layout = Layout.STD140
+        default_order = Order.COLUMN_MAJOR
 
         self.definitions_scalar = {index: Scalar.of(dtype) for index, dtype in self.byte_code.types_scalar.items()}
         self.definitions_vector = {index: Vector(n, dtype) for index, (dtype, n) in self.byte_code.types_vector.items()}
@@ -134,18 +134,18 @@ class Shader(object):
 
             offsets_bytecode = self.byte_code.find_offsets(index)
 
-            self.set_layout(index, ByteRepresentation.LAYOUT_STD140)
+            self.set_layout(index, Layout.STD140)
             match_std140 = offsets_bytecode == definition.offsets()
 
-            self.set_layout(index, ByteRepresentation.LAYOUT_STD430)
+            self.set_layout(index, Layout.STD430)
             match_std430 = offsets_bytecode == definition.offsets()
 
             if match_std140 and not match_std430:
-                self.set_layout(index, ByteRepresentation.LAYOUT_STD140)
+                self.set_layout(index, Layout.STD140)
             elif not match_std140 and match_std430:
-                self.set_layout(index, ByteRepresentation.LAYOUT_STD430)
+                self.set_layout(index, Layout.STD430)
             elif match_std140 and match_std430:
-                self.set_layout(index, ByteRepresentation.LAYOUT_STDXXX)
+                self.set_layout(index, Layout.STDXXX)
             else:
                 raise RuntimeError("Found unexpected memory offsets")
 

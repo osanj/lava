@@ -12,11 +12,6 @@ logger = logging.getLogger(__name__)
 class ByteCode(object):
     # https://www.khronos.org/registry/spir-v/specs/1.2/SPIRV.pdf
 
-    UINT = "uint"
-    INT = "int"
-    FLOAT = "float"
-    DOUBLE = "double"
-
     def __init__(self, bytez):
         self.bytez = bytearray(bytez)
 
@@ -123,10 +118,10 @@ class ByteCode(object):
         types_matrix = {}
 
         search_scalar = [
-            (self.FLOAT, {"operation": OpTypeFloat, "width": 32}),
-            (self.DOUBLE, {"operation": OpTypeFloat, "width": 64}),
-            (self.INT, {"operation": OpTypeInt, "width": 32, "signedness": 1}),
-            (self.UINT, {"operation": OpTypeInt, "width": 32, "signedness": 0}),
+            (spirv.DataType.FLOAT, {"operation": OpTypeFloat, "width": 32}),
+            (spirv.DataType.DOUBLE, {"operation": OpTypeFloat, "width": 64}),
+            (spirv.DataType.INT, {"operation": OpTypeInt, "width": 32, "signedness": 1}),
+            (spirv.DataType.UINT, {"operation": OpTypeInt, "width": 32, "signedness": 0}),
         ]
 
         # scalar types are "standalone"

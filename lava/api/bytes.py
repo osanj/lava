@@ -5,6 +5,8 @@ import logging
 
 import numpy as np
 
+from lava.api.constants.spirv import DataType, Layout
+
 logger = logging.getLogger(__name__)
 
 
@@ -17,21 +19,6 @@ class ByteRepresentation(object):
     # https://www.khronos.org/registry/OpenGL/extensions/ARB/ARB_uniform_buffer_object.txt
     #   search document for "Sub-section 2.15.3.1.2"
     #   search document for "The following example illustrates the rules specified by the "std140" layout"
-
-    LAYOUT_STD140 = "std140"
-    LAYOUT_STD430 = "std430"
-    LAYOUT_DEFAULT = LAYOUT_STD140
-    LAYOUT_STDXXX = "stdxxx"  # can not be inferred / does not matter
-
-    ORDER_COLUMN_MAJOR = "column_major"
-    ORDER_ROW_MAJOR = "row_major"
-    ORDER_DEFAULT = ORDER_ROW_MAJOR
-
-    #BOOL = "bool"  # machine unit 1 byte? (probably not 1 bit)
-    INT = "int"
-    UINT = "uint"
-    FLOAT = "float"
-    DOUBLE = "double"
 
     def __init__(self):
         pass
@@ -64,10 +51,10 @@ class ByteRepresentation(object):
 
     @classmethod
     def compare_layout(cls, layout_expected, layout_other, path, quiet=True):
-        if layout_expected == cls.LAYOUT_STDXXX:
+        if layout_expected == Layout.STDXXX:
             return True
 
-        if layout_expected != layout_other and layout_other != cls.LAYOUT_STDXXX:
+        if layout_expected != layout_other and layout_other != Layout.STDXXX:
             if not quiet:
                 raise RuntimeError(
                     "Expected layout {}, but got layout {} at {}".format(layout_expected, layout_other, " > ".join(path)))
@@ -93,29 +80,29 @@ class Scalar(ByteRepresentation):
 
     @classmethod
     def int(cls):
-        return cls.of(Scalar.INT)
+        return cls.of(DataType.INT)
 
     @classmethod
     def uint(cls):
-        return cls.of(Scalar.UINT)
+        return cls.of(DataType.UINT)
 
     @classmethod
     def float(cls):
-        return cls.of(Scalar.FLOAT)
+        return cls.of(DataType.FLOAT)
 
     @classmethod
     def double(cls):
-        return cls.of(Scalar.DOUBLE)
+        return cls.of(DataType.DOUBLE)
 
     @classmethod
     def of(cls, dtype):
-        if dtype == cls.INT:
+        if dtype == DataType.INT:
             return ScalarInt()
-        if dtype == cls.UINT:
+        if dtype == DataType.UINT:
             return ScalarUnsignedInt()
-        if dtype == cls.FLOAT:
+        if dtype == DataType.FLOAT:
             return ScalarFloat()
-        if dtype == cls.DOUBLE:
+        if dtype == DataType.DOUBLE:
             return ScalarDouble()
         raise RuntimeError("Unknown scalar type '{}'".format(dtype))
 
@@ -234,7 +221,7 @@ class ScalarDouble(Scalar):
 
 class Vector(ByteRepresentation):
 
-    def __init__(self, n=4, dtype=ByteRepresentation.FLOAT):
+    def __init__(self, n=4, dtype=DataType.FLOAT):
         super(Vector, self).__init__()
         self.dtype = dtype
         self.n = n
@@ -242,51 +229,51 @@ class Vector(ByteRepresentation):
 
     @classmethod
     def ivec2(cls):
-        return Vector(2, cls.INT)
+        return Vector(2, DataType.INT)
 
     @classmethod
     def ivec3(cls):
-        return Vector(3, cls.INT)
+        return Vector(3, DataType.INT)
 
     @classmethod
     def ivec4(cls):
-        return Vector(4, cls.INT)
+        return Vector(4, DataType.INT)
 
     @classmethod
     def uvec2(cls):
-        return Vector(2, cls.UINT)
+        return Vector(2, DataType.UINT)
 
     @classmethod
     def uvec3(cls):
-        return Vector(3, cls.UINT)
+        return Vector(3, DataType.UINT)
 
     @classmethod
     def uvec4(cls):
-        return Vector(4, cls.UINT)
+        return Vector(4, DataType.UINT)
 
     @classmethod
     def vec2(cls):
-        return Vector(2, cls.FLOAT)
+        return Vector(2, DataType.FLOAT)
 
     @classmethod
     def vec3(cls):
-        return Vector(3, cls.FLOAT)
+        return Vector(3, DataType.FLOAT)
 
     @classmethod
     def vec4(cls):
-        return Vector(4, cls.FLOAT)
+        return Vector(4, DataType.FLOAT)
 
     @classmethod
     def dvec2(cls):
-        return Vector(2, cls.DOUBLE)
+        return Vector(2, DataType.DOUBLE)
 
     @classmethod
     def dvec3(cls):
-        return Vector(3, cls.DOUBLE)
+        return Vector(3, DataType.DOUBLE)
 
     @classmethod
     def dvec4(cls):
-        return Vector(4, cls.DOUBLE)
+        return Vector(4, DataType.DOUBLE)
 
     def size(self):
         return self.scalar.size() * self.n
@@ -307,7 +294,7 @@ class Vector(ByteRepresentation):
         return "{} [{}]".format(self.glsl_dtype(), name or "?")
 
     def glsl_dtype(self):
-        return "{}vec{}".format(self.dtype.lower()[0] if self.dtype is not self.FLOAT else "", self.n)
+        return "{}vec{}".format(self.dtype.lower()[0] if self.dtype is not DataType.FLOAT else "", self.n)
 
     def compare(self, other, path=(), quiet=True):
         if not self.compare_type(type(self), type(other), path, quiet):
@@ -356,10 +343,10 @@ class Array(ByteRepresentation):
         self.precompute_alignment()
 
     def precompute_alignment(self):
-        if self.layout in [self.LAYOUT_STD140, self.LAYOUT_STD430, self.LAYOUT_STDXXX]:
+        if self.layout in [Layout.STD140, Layout.STD430, Layout.STDXXX]:
             self.a = self.definition.alignment()
 
-            if self.layout == self.LAYOUT_STD140:
+            if self.layout == Layout.STD140:
                 self.a += (16 - self.a % 16) % 16
 
     def shape(self):
@@ -461,10 +448,10 @@ class Struct(ByteRepresentation):
         self.precompute_alignment()
 
     def precompute_alignment(self):
-        if self.layout in [self.LAYOUT_STD140, self.LAYOUT_STD430, self.LAYOUT_STDXXX]:
+        if self.layout in [Layout.STD140, Layout.STD430, Layout.STDXXX]:
             self.a = max([d.alignment() for d in self.definitions])
 
-            if self.layout == self.LAYOUT_STD140:
+            if self.layout == Layout.STD140:
                 self.a += (16 - self.a % 16) % 16
 
     def size(self):
@@ -607,117 +594,67 @@ class ByteCache(object):
             index = self.definition.member_names.index(key)
             return self.values[self.definition.definitions[index]]
 
+        if isinstance(key, ByteRepresentation):
+            return self.values[key]
+
         raise RuntimeError("Invalid key")
 
     def __setitem__(self, key, value):
         pass
 
 
-class Matrix(ByteRepresentation):
-
-    def __init__(self, n=4, m=4, dtype=ByteRepresentation.FLOAT):
-        super(Matrix, self).__init__()
-        if dtype not in (self.FLOAT, self.DOUBLE):
-            raise RuntimeError("Matrices of type {} are not supported".format(dtype))
-        self.dtype = dtype
-        self.n = n  # columns
-        self.m = m  # rows
-        self.scalar = Scalar.of(dtype)
-
-    def size(self):
-        return self.scalar.size() * self.n * self.m
-
-    def shape(self):
-        return self.m, self.n
-
-    def alignment(self, layout, order):
-        # "A row-major matrix of C columns has a base alignment equal to the base alignment of a vector of C matrix
-        #  components."
-        if self.order == self.ROW_MAJOR:
-            return Vector(self.layout, self.n, self.dtype).alignment()
-
-        # "A column-major matrix has a base alignment equal to the base alignment of the matrix column type."
-        if self.order == self.COLUMN_MAJOR:
-            return self.scalar.alignment()
-        return -1
-
-    def glsl_dtype(self):
-        return "{}mat{}x{}".format("d" if self.dtype == self.DOUBLE else "", self.n, self.m)
-
-    def to_bytes(self, array, layout, order):
-        if isinstance(array, (list, tuple)):
-            array = np.array(array, dtype=self.scalar.numpy_dtype())
-
-        if array.shape != self.shape():
-            raise RuntimeError("Array as shape {}, expected {}".format(array.shape, self.shape()))
-
-        bytez = bytearray()
-
-        if self.order == self.ROW_MAJOR:
-            row_vector = Vector(self.layout, self.n, self.dtype)
-
-            for r in range(self.m):
-                bytez += row_vector.to_bytes(array[r, :])
-
-        if self.order == self.COLUMN_MAJOR:
-            for value in array.transpose().flatten():
-                bytez += self.scalar.to_bytes(value)
-
-        return bytez
-
-
-# class Struct(ByteRepresentation):
+# class Matrix(ByteRepresentation):
 #
-#     def __init__(self, *components):
-#         super(Struct, self).__init__()
-#         for i, component in enumerate(components):
-#             if component.layout != layout:
-#                 raise RuntimeError("Layout mismatch: struct has {}, but component at index {} has {}".format(
-#                     layout, i, component.layout
-#                 ))
-#
-#         self.components = components
+#     def __init__(self, n=4, m=4, dtype=ByteRepresentation.FLOAT):
+#         super(Matrix, self).__init__()
+#         if dtype not in (self.FLOAT, self.DOUBLE):
+#             raise RuntimeError("Matrices of type {} are not supported".format(dtype))
+#         self.dtype = dtype
+#         self.n = n  # columns
+#         self.m = m  # rows
+#         self.scalar = Scalar.of(dtype)
 #
 #     def size(self):
-#         return sum([c.size() for c in self.components])
-#
-#     def alignment(self):
-#         return max([c.alignment() for c in self.components])
-#
-#     def size_aligned(self):
-#         size = self.size()
-#         alignment = self.size()
-#
-#
-#     def glsl(self):
-#         raise NotImplementedError()
-#
-#     def convert_data_to_aligned_bytes(self, *args, **kwargs):
-#         raise NotImplementedError()
-#
-#     def convert_aligned_bytes_to_data(self, bytez):
-#         raise NotImplementedError()
-#
-#
-#
-# class Tensor(ByteRepresentation):
-#
-#     """ata structure implementation of ARB_arrays_of_arrays"""
-#     # https://www.khronos.org/registry/OpenGL/extensions/ARB/ARB_arrays_of_arrays.txt
-#
-#     def __init__(self, layout=ByteRepresentation.LAYOUT_DEFAULT, order=ByteRepresentation.ROW_MAJOR, dims=(),
-#                  dtype=ByteRepresentation.FLOAT):
-#
-#         pass
+#         return self.scalar.size() * self.n * self.m
 #
 #     def shape(self):
-#         return (4, 4, 4, 4)
+#         return self.m, self.n
 #
+#     def alignment(self, layout, order):
+#         # "A row-major matrix of C columns has a base alignment equal to the base alignment of a vector of C matrix
+#         #  components."
+#         if self.order == self.ROW_MAJOR:
+#             return Vector(self.layout, self.n, self.dtype).alignment()
 #
-# class DynamicArray(Struct):
+#         # "A column-major matrix has a base alignment equal to the base alignment of the matrix column type."
+#         if self.order == self.COLUMN_MAJOR:
+#             return self.scalar.alignment()
+#         return -1
 #
-#     def __init__(self):
-#         pass
+#     def glsl_dtype(self):
+#         return "{}mat{}x{}".format("d" if self.dtype == self.DOUBLE else "", self.n, self.m)
+#
+#     def to_bytes(self, array, layout, order):
+#         if isinstance(array, (list, tuple)):
+#             array = np.array(array, dtype=self.scalar.numpy_dtype())
+#
+#         if array.shape != self.shape():
+#             raise RuntimeError("Array as shape {}, expected {}".format(array.shape, self.shape()))
+#
+#         bytez = bytearray()
+#
+#         if self.order == self.ROW_MAJOR:
+#             row_vector = Vector(self.layout, self.n, self.dtype)
+#
+#             for r in range(self.m):
+#                 bytez += row_vector.to_bytes(array[r, :])
+#
+#         if self.order == self.COLUMN_MAJOR:
+#             for value in array.transpose().flatten():
+#                 bytez += self.scalar.to_bytes(value)
+#
+#         return bytez
+
 
 
 # specs
@@ -737,11 +674,4 @@ class Matrix(ByteRepresentation):
 # more stuff to come
 # http://www.paranormal-entertainment.com/idr/blog/posts/2014-01-29T17:08:42Z-GLSL_multidimensional_array_madness/
 
-
-if __name__ == "__main__":
-    scalar = Scalar.of(Scalar.INT)
-    print scalar.glsl()
-
-    vec = Vector(n=3, dtype=Scalar.UINT)
-    print vec.glsl()
 

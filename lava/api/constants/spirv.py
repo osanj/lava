@@ -5,6 +5,25 @@ MAGIC_NUMBER = 0x07230203
 WORD_COUNT_HEADER = 5
 
 
+class DataType(object):
+    # BOOL = "bool"  # machine unit 1 byte? (probably not 1 bit)
+    INT = "int"
+    UINT = "uint"
+    FLOAT = "float"
+    DOUBLE = "double"
+
+
+class Layout(object):
+    STD140 = "std140"
+    STD430 = "std430"
+    STDXXX = "stdxxx"  # can not be inferred / does not matter
+
+
+class Order(object):
+    COLUMN_MAJOR = "column_major"
+    ROW_MAJOR = "row_major"
+
+
 class SpirvEnum(object):
 
     _MAP = ()

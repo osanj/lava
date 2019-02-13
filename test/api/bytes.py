@@ -4,8 +4,9 @@ import itertools
 import logging
 import unittest
 
-from lava.api.constants.vk import BufferUsage, MemoryType
 from lava.api.bytes import *
+from lava.api.constants.spirv import Layout, Order
+from lava.api.constants.vk import BufferUsage, MemoryType
 from lava.api.memory import Buffer
 from lava.api.pipeline import Executor, Pipeline
 from lava.api.shader import Shader
@@ -115,7 +116,7 @@ void main() {{
     @classmethod
     def build_glsl_block_definition(cls, container, binding=0, usage=BufferUsage.STORAGE_BUFFER):
         glsl = "layout({}, binding = {}) {} dataIn {{".format(
-            "std140" if container.layout == ByteRepresentation.LAYOUT_STD140 else "std430", binding,
+            "std140" if container.layout == Layout.STD140 else "std430", binding,
             "readonly buffer" if usage == BufferUsage.STORAGE_BUFFER else "uniform", )
         glsl += "\n"
 
@@ -150,9 +151,9 @@ void main() {{
                 var_name_complete = var_name or cls.generate_var_name(d, i, var_name_prefix)
                 glsl_code, step = cls.build_glsl_assignments_vector(j, d.length(), var_name_complete, array_name)
 
-            elif isinstance(d, Matrix):
-                var_name_complete = var_name or cls.generate_var_name(d, i, var_name_prefix)
-                glsl_code, step = cls.build_glsl_assignments_matrix(j, d.n, d.m, var_name_complete, array_name)
+            # elif isinstance(d, Matrix):
+            #     var_name_complete = var_name or cls.generate_var_name(d, i, var_name_prefix)
+            #     glsl_code, step = cls.build_glsl_assignments_matrix(j, d.n, d.m, var_name_complete, array_name)
 
             elif isinstance(d, Array):
                 var_name_complete = var_name or cls.generate_var_name(d, i, var_name_prefix)
@@ -237,11 +238,11 @@ void main() {{
                 values_raw.extend(values_mapped[d])
                 count += d.length()
 
-            elif isinstance(d, Matrix):
-                rows, cols = d.shape()
-                values_mapped[d] = np.arange(count, count + rows * cols, dtype=d.scalar.numpy_dtype())
-                values_raw.extend(values_mapped[d])
-                count += rows * cols
+            # elif isinstance(d, Matrix):
+            #     rows, cols = d.shape()
+            #     values_mapped[d] = np.arange(count, count + rows * cols, dtype=d.scalar.numpy_dtype())
+            #     values_raw.extend(values_mapped[d])
+            #     count += rows * cols
 
             elif isinstance(d, Array):
                 if isinstance(d.definition, Scalar):
@@ -277,8 +278,8 @@ void main() {{
     #@unittest.skip("test for development purposes")
     def test_manually(self):
         buffer_usage = BufferUsage.STORAGE_BUFFER
-        buffer_layout = ByteRepresentation.LAYOUT_STD140
-        buffer_order = ByteRepresentation.ORDER_ROW_MAJOR
+        buffer_layout = Layout.STD140
+        buffer_order = Order.ROW_MAJOR
 
         structA = Struct([Vector.ivec2(), Scalar.double()], buffer_layout, member_names=["a", "b"], type_name="structA")
         structB = Struct([Scalar.uint(), Scalar.double()], buffer_layout, type_name="structB")
@@ -317,8 +318,8 @@ void main() {{
     def test_manually2(self):
         # buffer padding test
         buffer_usage = BufferUsage.STORAGE_BUFFER
-        buffer_layout = ByteRepresentation.LAYOUT_STD430
-        buffer_order = ByteRepresentation.ORDER_ROW_MAJOR
+        buffer_layout = Layout.STD430
+        buffer_order = Order.ROW_MAJOR
 
         struct1 = Struct([Vector.vec3(), Vector.ivec2()], buffer_layout, type_name="structB")
         struct2 = Struct([Scalar.double(), Scalar.double(), struct1], buffer_layout, type_name="structC")
@@ -352,8 +353,8 @@ void main() {{
     def test_manually3(self):
         # byte cache test
         buffer_usage = BufferUsage.STORAGE_BUFFER
-        buffer_layout = ByteRepresentation.LAYOUT_STD430
-        buffer_order = ByteRepresentation.ORDER_ROW_MAJOR
+        buffer_layout = Layout.STD430
+        buffer_order = Order.ROW_MAJOR
 
         struct1 = Struct([Vector.vec3(), Vector.ivec2()], buffer_layout, member_names=["a", "b"], type_name="structB")
         struct2 = Struct([Scalar.double(), Scalar.double(), struct1], buffer_layout, type_name="structC")
@@ -436,8 +437,8 @@ class TestArrayIn(TestByteRepresentation):
                 // array[5] = mat[3][0];
             }
             """
-        layout = ByteRepresentation.LAYOUT_STD140
-        matrix_order = ByteRepresentation.ORDER_ROW_MAJOR
+        layout = Layout.STD140
+        matrix_order = Order.ROW_MAJOR
 
         shape = (2, 5)
         expected = np.arange(np.product(shape), dtype=np.float32)
@@ -501,8 +502,8 @@ class TestArrayIn(TestByteRepresentation):
                 // array[5] = mat[3][0];
             }
             """
-        layout = ByteRepresentation.LAYOUT_STD430
-        matrix_order = ByteRepresentation.ORDER_ROW_MAJOR
+        layout = Layout.STD430
+        matrix_order = Order.ROW_MAJOR
 
         shape = (3, 5, 11)
         expected = np.arange(np.product(shape), dtype=np.float32)
@@ -571,8 +572,8 @@ class TestStructIn(TestByteRepresentation):
 
             }
             """
-        layout = ByteRepresentation.LAYOUT_STD140
-        matrix_order = ByteRepresentation.ORDER_ROW_MAJOR
+        layout = Layout.STD140
+        matrix_order = Order.ROW_MAJOR
 
         expected = np.zeros(12, dtype=np.float32)
 
@@ -647,8 +648,8 @@ class TestStructIn(TestByteRepresentation):
                 
             }
             """
-        layout = ByteRepresentation.LAYOUT_STD140
-        matrix_order = ByteRepresentation.ORDER_ROW_MAJOR
+        layout = Layout.STD140
+        matrix_order = Order.ROW_MAJOR
 
         expected = np.zeros(76, dtype=np.float32)
 

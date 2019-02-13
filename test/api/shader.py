@@ -6,6 +6,7 @@ import time
 import unittest
 
 from lava.api.bytes import *
+from lava.api.constants.spirv import Layout
 from lava.api.shader import *
 from lava.session import Session
 from lava.util import compile_glsl
@@ -154,7 +155,7 @@ class TestByteCodeInspection(unittest.TestCase):
         print ""
         print ""
 
-        buffer_layout = ByteRepresentation.LAYOUT_STD140
+        buffer_layout = Layout.STD140
 
         # struct1 = Struct([Vector.vec3(), Vector.ivec2()], buffer_layout, type_name="structB")
         struct1 = Struct([Vector.vec3(), Vector.ivec3()], buffer_layout, type_name="structB")
