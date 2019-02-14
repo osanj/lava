@@ -309,7 +309,14 @@ void main() {{
         values, expected = self.build_input_values(container.definitions)
         expected = np.array(expected, dtype=np.float32)
 
-        output = self.run_program(glsl, container.to_bytes(values), expected, usage_input=buffer_usage)
+        import time
+        t0 = time.time()
+        bbb = container.to_bytes(values)
+        dt = time.time() - t0
+
+        print "dt", dt
+
+        output = self.run_program(glsl, bbb, expected, usage_input=buffer_usage)
 
         print expected
         print output
@@ -387,6 +394,95 @@ void main() {{
         print ""
         print ""
         pprint.pprint(cache.get_as_dict())
+
+
+class TestShaderToCpu(TestByteRepresentation):
+
+    #@unittest.skip("test for development purposes")
+    def test_manually(self):
+        glsl = """
+            #version 450
+            #extension GL_ARB_separate_shader_objects : enable
+
+            layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
+    
+            struct Data1 {
+                dvec4 var1;
+                uint var2;
+                ivec2[3] var3;
+            };
+
+            layout(std430, binding = 0) readonly buffer dataIn {
+                float[16] array;
+            }; // stdout430 so we have no array alignment fiddling
+            
+            layout(std140, binding = 1) writeonly buffer dataOut {
+                double output1;
+                vec3 output2;
+                Data1 output3;
+            }; 
+
+            void main() {
+                output1 = float(array[0]);
+                output2.x = float(array[1]);
+                output2.y = float(array[2]);
+                output2.z = float(array[3]);
+                output3.var1.x = double(array[4]);
+                output3.var1.y = double(array[5]);
+                output3.var1.z = double(array[6]);
+                output3.var1.w = double(array[7]);
+                output3.var2 = uint(array[8]);
+                output3.var3[0].x = int(array[9]);
+                output3.var3[0].y = int(array[10]);
+                output3.var3[1].x = int(array[11]);
+                output3.var3[1].y = int(array[12]);
+                output3.var3[2].x = int(array[13]);
+                output3.var3[2].y = int(array[14]);
+            }
+            """
+        layout = Layout.STD140
+        matrix_order = Order.ROW_MAJOR
+
+        data1 = Struct([
+            Vector.dvec4(),
+            Scalar.int(),
+            Array(Vector.ivec2(), 3, layout)
+        ], layout, type_name="Data1")
+
+        container = Struct([
+            Scalar.double(),
+            Vector.vec3(),
+            data1,
+        ], layout)
+
+        bytez_in = np.arange(16, dtype=np.float32).tobytes()  # std430
+        bytez_out = self.run_program(glsl, bytez_in, container.size())
+
+        print container.from_bytes(bytez_out)
+
+
+
+    @classmethod
+    def run_program(cls, glsl, bytez_input, bytez_output_length, usage_input=BufferUsage.STORAGE_BUFFER,
+                    usage_output=BufferUsage.STORAGE_BUFFER):
+        session = cls.SESSION
+        shader = cls.shader_from_txt(glsl)
+
+        buffer_in = cls.allocate_buffer(len(bytez_input), usage_input, MemoryType.CPU)
+        buffer_out = cls.allocate_buffer(bytez_output_length, usage_output, MemoryType.CPU)
+
+        buffer_in.map(bytez_input)
+
+        pipeline = Pipeline(session.device, shader, [buffer_in, buffer_out])
+        executor = Executor(session.device, pipeline, session.queue_index)
+
+        executor.record(1, 1, 1)
+        executor.execute_and_wait()
+
+        with buffer_out.mapped() as bytebuffer:
+            bytez_output = bytebuffer[:]
+
+        return bytez_output
 
 
 class TestMatrixIn(TestByteRepresentation):

@@ -68,8 +68,8 @@ class ByteRepresentation(object):
     def to_bytes(self, values):
         raise NotImplementedError()
 
-    # def from_bytes(self, bytez):
-    #     raise NotImplementedError()
+    def from_bytes(self, bytez):
+        raise NotImplementedError()
 
 
 class Scalar(ByteRepresentation):
@@ -124,6 +124,9 @@ class Scalar(ByteRepresentation):
             raise RuntimeError("{} got dtype {} (expects one of the following {})".format(
                 self.__class__.__name__, type(value), self.input_dtypes
             ))
+
+    def from_bytes(self, bytez):
+        return np.frombuffer(bytez, self.numpy_dtype())[0]
 
     def numpy_dtype(self):
         raise NotImplementedError()
@@ -323,6 +326,9 @@ class Vector(ByteRepresentation):
 
         return bytez
 
+    def from_bytes(self, bytez):
+        return np.frombuffer(bytez, self.scalar.numpy_dtype())[:self.n]
+
 
 class Array(ByteRepresentation):
 
@@ -355,19 +361,19 @@ class Array(ByteRepresentation):
     def size(self):
         s = self.definition.size()
         s += (self.a - s % self.a) % self.a  # pad to array stride
-        return s * np.product(self.dims)
+        return s * np.product(self.shape())
 
     def alignment(self):
         return self.a
 
     def __str__(self, name=None, indent=2):
         s = self.definition.glsl_dtype()  # "array"
-        s += ("[{}]" * len(self.shape())).format(*self.dims)
+        s += ("[{}]" * len(self.shape())).format(*self.shape())
         s += " [{}] {{ {} }}".format(name or "?", self.definition.__str__(indent=indent + 2))
         return s
 
     def glsl_dtype(self):
-        return ("{}" + "[{}]" * len(self.shape())).format(self.definition.glsl_dtype(), *self.dims)
+        return ("{}" + "[{}]" * len(self.shape())).format(self.definition.glsl_dtype(), *self.shape())
 
     def compare(self, other, path=(), quiet=True):
         if not self.compare_type(type(self), type(other), path, quiet):
@@ -391,10 +397,17 @@ class Array(ByteRepresentation):
     def to_bytes(self, values):
         if isinstance(self.definition, Scalar):
             return self.to_bytes_for_scalars(values)
+
+        # elif isinstance(self.definition, Vector):
+        #     return self.to_bytes_for_vectors(values)
+        #
+        # elif isinstance(self.definition, Matrix):
+        #     return self.to_bytes_for_matrices(values)
+
         else:
             bytez = bytearray()
 
-            for value in self.iterate_over_nd_array(values, self.dims):
+            for value in self.iterate_over_nd_array(values, self.shape()):
                 bytez += self.definition.to_bytes(value)
                 padding = (self.a - len(bytez) % self.a) % self.a
                 bytez += bytearray(padding)
@@ -409,7 +422,7 @@ class Array(ByteRepresentation):
                 value = value[idx]
             yield value
 
-    def to_bytes_for_scalars(self, array, *args, **kwargs):
+    def to_bytes_for_scalars(self, array):
         if not isinstance(array, np.ndarray):
             raise RuntimeError("Incorrect datatype {}, expected {}".format(type(array), np.ndarray))
         # if array.dtype is not self.definition.numpy_dtype():
@@ -426,6 +439,40 @@ class Array(ByteRepresentation):
 
         # for std430 the following would be sufficient: return array.flatten().tobytes()
         return array_padded.tobytes()
+
+    def from_bytes(self, bytez):
+        if isinstance(self.definition, Scalar):
+            return self.from_bytes_for_scalars(bytez)
+
+        # elif isinstance(self.definition, Vector):
+        #     return self.to_bytes_for_vectors(values)
+        #
+        # elif isinstance(self.definition, Matrix):
+        #     return self.to_bytes_for_matrices(values)
+
+        else:
+            values = np.zeros(self.shape()).tolist()
+            offset = 0
+            size = self.definition.size()
+
+            for indices in itertools.product(*[range(s) for s in self.shape()]):
+                _data = values
+
+                for index in indices[:-1]:
+                    _data = _data[index]
+
+                _data[indices[-1]] = self.definition.from_bytes(bytez[offset:offset + size])
+                offset += (self.a - offset % self.a) % self.a  # bytes
+
+            return values
+
+    def from_bytes_for_scalars(self, bytez):
+        p = (self.a - self.definition.alignment()) / self.definition.size()
+        a = self.a / self.definition.size()
+
+        array_padded = np.frombuffer(bytez, dtype=self.definition.numpy_dtype())
+        mask = (np.arange(a * np.product(self.shape())) % a) < (a - p)
+        return array_padded[mask].reshape(self.shape())
 
 
 class Struct(ByteRepresentation):
@@ -516,11 +563,29 @@ class Struct(ByteRepresentation):
             a = d.alignment()
             padding_before = (a - len(bytez) % a) % a
             bytez += bytearray(padding_before)
+
             bytez += d.to_bytes(values[d])
+
             padding_after = (a - len(bytez) % a) % a
             bytez += bytearray(padding_after)
 
         return bytez
+
+    def from_bytes(self, bytez):
+        values = {}
+        offset = 0
+
+        for d in self.definitions:
+            a = d.alignment()
+            offset += (a - offset % a) % a  # padding before
+            size = d.size()
+
+            values[d] = d.from_bytes(bytez[offset:offset + size])
+
+            offset += size
+            offset += (a - offset % a) % a  # padding after
+
+        return values
 
 
 class ByteCache(object):
