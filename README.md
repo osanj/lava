@@ -6,17 +6,17 @@ numpy + shaders = <3
 
 ### To-Do List
 - [ ] memory alignment of (arbitrary) complex types
-  - [ ] scalars
+  - [x] scalars
     - [x] to shader
-    - [ ] from shader
-  - [ ] vectors
+    - [x] from shader
+  - [x] vectors
     - [x] to shader
-    - [ ] from shader
+    - [x] from shader
   - [ ] matrices
     - [ ] to shader
     - [ ] from shader
-  - [ ] structures
-    - [x] to shader
+  - [x] structures
+    - [ ] to shader
     - [ ] from shader
   - [ ] multi-dimensional arrays
     - [x] to shader

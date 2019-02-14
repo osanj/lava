@@ -30,32 +30,32 @@ class ByteCode(object):
         self.types_array = self.find_array_types()
         self.types_struct = self.find_struct_types()
 
-        print "scalars"
-        print self.types_scalar
-        print ""
-        print "vectors"
-        print self.types_vector
-        print ""
-        print "matrices"
-        print self.types_matrix
-        print ""
-        print "array"
-        print self.types_array
-        print ""
-        print "struct"
-        print self.types_struct
-        print ""
-        print "names"
-        names = []
-        for idx in self.types_struct:
-            struct_name, member_names = self.find_names(idx)
-            offsets = self.find_offsets(idx)
-            names.append("  {}) {} {{ {} }}".format(idx, struct_name, ", ".join(["{}({})".format(*x) for x in zip(member_names, offsets)])))
-        print "\n".join(names)
-        print ""
-        print "blocks"
-        print self.find_blocks()
-        print ""
+        # print "scalars"
+        # print self.types_scalar
+        # print ""
+        # print "vectors"
+        # print self.types_vector
+        # print ""
+        # print "matrices"
+        # print self.types_matrix
+        # print ""
+        # print "array"
+        # print self.types_array
+        # print ""
+        # print "struct"
+        # print self.types_struct
+        # print ""
+        # print "names"
+        # names = []
+        # for idx in self.types_struct:
+        #     struct_name, member_names = self.find_names(idx)
+        #     offsets = self.find_offsets(idx)
+        #     names.append("  {}) {} {{ {} }}".format(idx, struct_name, ", ".join(["{}({})".format(*x) for x in zip(member_names, offsets)])))
+        # print "\n".join(names)
+        # print ""
+        # print "blocks"
+        # print self.find_blocks()
+        # print ""
 
     @classmethod
     def read_word(cls, bytez, offset=0):
@@ -232,19 +232,24 @@ class ByteCode(object):
         return blocks
 
     def find_entry_points(self, execution_model):
-        entry_points = []
+        entry_points = {}
         instructions = self.find_instructions_with_attributes(OpEntryPoint, execution_model=execution_model)
 
         for instruction in instructions:
-            entry_points.append(instruction.op.name)
+            entry_points[instruction.op.entry_point] = instruction.op.name
 
         return entry_points
 
+    def find_entry_point_details(self, entry_point_index):
+        execution_mode = None
+        literals = None
+        instructions = self.find_instructions_with_attributes(OpExecutionMode, entry_point=entry_point_index)
 
-    # get entry point
-    # get binding
-    # get std140
-    # get struct layout ?
+        if len(instructions) == 1:
+            execution_mode = instructions[0].op.execution_mode
+            literals = instructions[0].op.literals
+
+        return execution_mode, literals
 
 
 class ByteCodeHeader(object):

@@ -6,7 +6,7 @@ import vulkan as vk
 
 from lava.api.bytecode import ByteCode
 from lava.api.bytes import Array, Scalar, Struct, Vector
-from lava.api.constants.spirv import Decoration, ExecutionModel, Layout, Order, StorageClass
+from lava.api.constants.spirv import Decoration, ExecutionMode, ExecutionModel, Layout, Order, StorageClass
 from lava.api.constants.vk import BufferUsage
 
 logger = logging.getLogger(__name__)
@@ -31,30 +31,47 @@ class Shader(object):
         self.definitions_struct = None
 
         # check / set entry point
-        self.entry_point = self.check_entry_point(entry_point)
+        self.entry_point, self.entry_point_index = self.check_entry_point(entry_point)
+        self.local_size = self.check_local_size(self.entry_point_index)
 
     def __del__(self):
         vk.vkDestroyShaderModule(self.device.handle, self.handle, None)
 
     def check_entry_point(self, entry_point):
         entry_points_detected = self.byte_code.find_entry_points(execution_model=ExecutionModel.GL_COMPUTE)
+        index = None
 
         if len(entry_points_detected) == 0:
             raise RuntimeError("Could not find entry points for execution model {}".format(ExecutionModel.GL_COMPUTE))
 
-        if entry_point is not None and entry_point not in entry_points_detected:
-            raise RuntimeError("Could find entry point {} in detected entry points {}".format(
+        if entry_point is not None and entry_point not in entry_points_detected.values():
+            raise RuntimeError("Could not find entry point {} in detected entry points {}".format(
                 entry_point, ", ".join(entry_points_detected)))
 
         if entry_point is None:
             if len(entry_points_detected) > 1:
-                raise RuntimeError("Multiple entry points found {}".format(", ".join(entry_points_detected)))
-            entry_point = entry_points_detected[0]
+                raise RuntimeError("Multiple entry points found {}".format(", ".join(entry_points_detected.values())))
+            entry_point = entry_points_detected.values()[0]
 
-        return entry_point
+        for index_candidate, entry_point_candidate in entry_points_detected.iteritems():
+            if entry_point_candidate == entry_point:
+                index = index_candidate
+
+        return entry_point, index
+
+    def check_local_size(self, entry_point_index):
+        execution_mode, literals = self.byte_code.find_entry_point_details(entry_point_index)
+
+        if execution_mode != ExecutionMode.LOCAL_SIZE:
+            raise RuntimeError("Unsupported execution mode {}".format(execution_mode))
+
+        return literals
 
     def get_entry_point(self):
         return self.entry_point
+
+    def get_local_size(self):
+        return self.local_size  # self.byte_code.find_local_size(self.entry_point, ExecutionModel.GL_COMPUTE)
 
     def inspect(self):
         self.inspect_definitons()

@@ -58,13 +58,13 @@ class TestByteRepresentation(unittest.TestCase):
         del mem
 
     @classmethod
-    def run_program(cls, glsl, bytez_input, expected_output, usage_input=BufferUsage.STORAGE_BUFFER,
+    def run_program(cls, glsl, bytez_input, bytez_output_size, usage_input=BufferUsage.STORAGE_BUFFER,
                     usage_output=BufferUsage.STORAGE_BUFFER):
         session = cls.SESSION
         shader = cls.shader_from_txt(glsl)
 
         buffer_in = cls.allocate_buffer(len(bytez_input), usage_input, MemoryType.CPU)
-        buffer_out = cls.allocate_buffer(expected_output.nbytes, usage_output, MemoryType.CPU)
+        buffer_out = cls.allocate_buffer(bytez_output_size, usage_output, MemoryType.CPU)
 
         buffer_in.map(bytez_input)
 
@@ -74,40 +74,15 @@ class TestByteRepresentation(unittest.TestCase):
         executor.record(1, 1, 1)
         executor.execute_and_wait()
 
+        # with buffer_out.mapped() as bytebuffer:
+        #     y = np.frombuffer(bytebuffer[:], dtype=expected_output.dtype).copy()
+        #
+        # return y
+
         with buffer_out.mapped() as bytebuffer:
-            y = np.frombuffer(bytebuffer[:], dtype=expected_output.dtype).copy()
+            bytez_output = bytebuffer[:]
 
-        return y
-
-
-class TestCpuToShader(TestByteRepresentation):
-    """Transferring scalars and vectors in arbitrary order into the shader"""
-
-    @classmethod
-    def build_glsl_program(cls, container, structs, buffer_usage):
-        template = """
-#version 450
-#extension GL_ARB_separate_shader_objects : enable
-
-layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
-
-{}
-
-{}
-
-layout(std430, binding = 1) writeonly buffer dataOut {{
-    float array[];
-}}; // stdout430 so we have no array alignment fiddling
-
-void main() {{
-{}
-}}"""
-
-        struct_definitions = "\n\n".join([cls.build_glsl_struct_definition(struct) for struct in structs])
-        block_definition = cls.build_glsl_block_definition(container, usage=buffer_usage)
-        assignments, _ = cls.build_glsl_assignemnts(container.definitions)
-
-        return template.format(struct_definitions, block_definition, assignments)
+        return bytez_output
 
     @classmethod
     def generate_var_name(cls, definition, index, prefix=""):
@@ -117,7 +92,7 @@ void main() {{
     def build_glsl_block_definition(cls, container, binding=0, usage=BufferUsage.STORAGE_BUFFER):
         glsl = "layout({}, binding = {}) {} dataIn {{".format(
             "std140" if container.layout == Layout.STD140 else "std430", binding,
-            "readonly buffer" if usage == BufferUsage.STORAGE_BUFFER else "uniform", )
+            "buffer" if usage == BufferUsage.STORAGE_BUFFER else "uniform", )
         glsl += "\n"
 
         for i, d in enumerate(container.definitions):
@@ -138,38 +113,40 @@ void main() {{
         return glsl + "};"
 
     @classmethod
-    def build_glsl_assignemnts(cls, definitions, var_name=None, array_name="array", array_index=0, parent=None, var_name_prefix=""):
+    def build_glsl_assignments(cls, definitions, var_name=None, array_name="array", array_index=0, parent=None, var_name_prefix="", to_array=True):
         glsl = ""
         j = array_index
 
         for i, d in enumerate(definitions):
             if isinstance(d, Scalar):
                 var_name_complete = var_name or cls.generate_var_name(d, i, var_name_prefix)
-                glsl_code, step = cls.build_glsl_assignemnts_scalar(j, var_name_complete, array_name)
+                glsl_code, step = cls.build_glsl_assignments_scalar(d, j, var_name_complete, array_name, to_array=to_array)
 
             elif isinstance(d, Vector):
                 var_name_complete = var_name or cls.generate_var_name(d, i, var_name_prefix)
-                glsl_code, step = cls.build_glsl_assignments_vector(j, d.length(), var_name_complete, array_name)
+                glsl_code, step = cls.build_glsl_assignments_vector(d, j, var_name_complete, array_name, to_array=to_array)
 
             # elif isinstance(d, Matrix):
             #     var_name_complete = var_name or cls.generate_var_name(d, i, var_name_prefix)
-            #     glsl_code, step = cls.build_glsl_assignments_matrix(j, d.n, d.m, var_name_complete, array_name)
+            #     glsl_code, step = cls.build_glsl_assignments_matrix(d, j, var_name_complete, array_name, to_array=to_array)
 
             elif isinstance(d, Array):
                 var_name_complete = var_name or cls.generate_var_name(d, i, var_name_prefix)
                 if isinstance(d.definition, Scalar):
-                    glsl_code, step = cls.build_glsl_assignemnts_array_scalar(j, d.dims, var_name_complete, array_name)
+                    glsl_code, step = cls.build_glsl_assignments_array_scalar(d, j, var_name_complete, array_name, to_array=to_array)
                 else:
-                    glsl_code, step = cls.build_glsl_assignemnts_array_complex(j, d, var_name_complete, array_name)
+                    glsl_code, step = cls.build_glsl_assignments_array_complex(d, j, var_name_complete, array_name, to_array=to_array)
 
             elif isinstance(d, Struct):
                 if isinstance(parent, Array):
                     var_name_complete = var_name + "."
-                    glsl_code, step_overall = cls.build_glsl_assignemnts(d.definitions, var_name=None, var_name_prefix=var_name_complete, array_name=array_name, array_index=j, parent=d)
+                    glsl_code, step_overall = cls.build_glsl_assignments(d.definitions, var_name=None, var_name_prefix=var_name_complete,
+                                                                         array_name=array_name, array_index=j, parent=d, to_array=to_array)
                     step = step_overall - j
                 else:
                     var_name_complete = var_name or cls.generate_var_name(d, i, var_name_prefix) + "."
-                    glsl_code, step_overall = cls.build_glsl_assignemnts(d.definitions, var_name=None, var_name_prefix=var_name_complete, array_name=array_name, array_index=j, parent=d)
+                    glsl_code, step_overall = cls.build_glsl_assignments(d.definitions, var_name=None, var_name_prefix=var_name_complete,
+                                                                         array_name=array_name, array_index=j, parent=d, to_array=to_array)
                     step = step_overall - j
 
             else:
@@ -181,48 +158,73 @@ void main() {{
         return glsl, j
 
     @classmethod
-    def build_glsl_assignemnts_scalar(cls, i, var_name_complete, array_name="array"):
-        glsl = "{}[{}] = float({});".format(array_name, i, var_name_complete)
+    def build_glsl_assignments_scalar(cls, dfn, i, var_name_complete, array_name="array", to_array=True):
+        if to_array:
+            glsl = "{}[{}] = float({});".format(array_name, i, var_name_complete)
+        else:
+            glsl = "{} = {}({}[{}]);".format(var_name_complete, dfn.glsl_dtype(), array_name, i)
         glsl += "\n"
         return glsl, 1
 
     @classmethod
-    def build_glsl_assignments_vector(cls, i, n, var_name_complete, array_name="array"):
+    def build_glsl_assignments_vector(cls, dfn, i, var_name_complete, array_name="array", to_array=True):
         glsl = ""
+        n = dfn.length()
         for j in range(n):
-            glsl += "{}[{}] = float({}.{});".format(array_name, i + j, var_name_complete, "xyzw"[j])
+            if to_array:
+                glsl += "{}[{}] = float({}.{});".format(array_name, i + j, var_name_complete, "xyzw"[j])
+            else:
+                glsl += "{}.{} = {}({}[{}]);".format(var_name_complete, "xyzw"[j], dfn.scalar.glsl_dtype(), array_name, i + j)
             glsl += "\n"
         return glsl, n
 
     @classmethod
-    def build_glsl_assignments_matrix(cls, i, cols, rows, var_name_complete, array_name="array"):
+    def build_glsl_assignments_matrix(cls, dfn, i, var_name_complete, array_name="array", to_array=True):
         glsl = ""
+        cols, rows = dfn.n, dfn.m
         for k, r, c in enumerate(itertools.product(range(cols), range(rows))):
-            glsl += "{}[{}] = float({}[{}][{}]);".format(array_name, i + k, var_name_complete, c, r)
+            if to_array:
+                glsl += "{}[{}] = float({}[{}][{}]);".format(array_name, i + k, var_name_complete, c, r)
+            else:
+                glsl += "{}[{}][{}] = {}({}[{}]);".format(var_name_complete, c, r, dfn.scalar.glsl_dtype(), array_name, i + k)
             glsl += "\n"
         return glsl, cols * rows
 
     @classmethod
-    def build_glsl_assignemnts_array_scalar(cls, i, dims, var_name_complete, array_name="array"):
+    def build_glsl_assignments_array_scalar(cls, dfn, i, var_name_complete, array_name="array", to_array=True):
         glsl = ""
+        dims = dfn.shape()
+        glsl_dtype = None
+
+        if isinstance(dfn.definition, Scalar):
+            glsl_dtype = dfn.definition.glsl_dtype()
+        if isinstance(dfn.definition, Vector):
+            glsl_dtype = dfn.definition.scalar.glsl_dtype()
+        # if isinstance(dfn.definition, Matrix):
+        #     glsl_dtype = dfn.definition.scalar.glsl_dtype()
+
         for k, indices in enumerate(itertools.product(*[range(d) for d in dims])):
-            glsl += ("{}[{}] = float({}" + "[{}]" * len(dims) + ");").format(array_name, i + k, var_name_complete, *indices)
+            var_name_complete_with_indices = ("{}" + "[{}]" * len(dims)).format(var_name_complete, *indices)
+            if to_array:
+                glsl += "{}[{}] = float({});".format(array_name, i + k, var_name_complete_with_indices)
+            else:
+                glsl += "{} = {}({}[{}]);".format(var_name_complete_with_indices, glsl_dtype, array_name, i + k)
             glsl += "\n"
         return glsl, np.product(dims)
 
     @classmethod
-    def build_glsl_assignemnts_array_complex(cls, i, array, var_name_complete, array_name="array"):
+    def build_glsl_assignments_array_complex(cls, array, i, var_name_complete, array_name="array", to_array=True):
         glsl = ""
         old_i = i
         for indices in itertools.product(*[range(d) for d in array.dims]):
             new_var_name_complete = ("{}" + "[{}]" * len(array.dims)).format(var_name_complete, *indices)
-            new_glsl, new_i = cls.build_glsl_assignemnts([array.definition], new_var_name_complete, array_name=array_name, array_index=i, parent=array)
+            new_glsl, new_i = cls.build_glsl_assignments([array.definition], new_var_name_complete, array_name=array_name, array_index=i, parent=array, to_array=to_array)
             glsl += new_glsl
             i = new_i
         return glsl, i - old_i
 
     @classmethod
-    def build_input_values(cls, definitions, offset=0):
+    def build_values(cls, definitions, offset=0):
         count = offset
         values_raw = []
         values_mapped = {}
@@ -256,7 +258,7 @@ void main() {{
                 else:
                     data = np.zeros(d.shape()).tolist()
                     for indices in itertools.product(*[range(s) for s in d.shape()]):
-                        tmp1, tmp2 = cls.build_input_values([d.definition], offset=count)
+                        tmp1, tmp2 = cls.build_values([d.definition], offset=count)
                         _data = data
                         for index in indices[:-1]:
                             _data = _data[index]
@@ -266,7 +268,7 @@ void main() {{
                     values_mapped[d] = data
 
             elif isinstance(d, Struct):
-                tmp1, tmp2 = cls.build_input_values(d.definitions, offset=count)
+                tmp1, tmp2 = cls.build_values(d.definitions, offset=count)
                 values_mapped[d] = tmp1
                 values_raw.extend(tmp2)
                 count += len(tmp2)
@@ -274,6 +276,36 @@ void main() {{
                 raise RuntimeError()
 
         return values_mapped, values_raw
+
+
+class TestCpuToShader(TestByteRepresentation):
+    """Transferring data in arbitrary order into the shader"""
+
+    @classmethod
+    def build_glsl_program(cls, container, structs, buffer_usage):
+        template = """
+#version 450
+#extension GL_ARB_separate_shader_objects : enable
+
+layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
+
+{}
+
+{}
+
+layout(std430, binding = 1) buffer dataOut {{
+    float array[];
+}}; // stdout430 so we have no array alignment fiddling
+
+void main() {{
+{}
+}}"""
+
+        struct_definitions = "\n\n".join([cls.build_glsl_struct_definition(struct) for struct in structs])
+        block_definition = cls.build_glsl_block_definition(container, usage=buffer_usage)
+        assignments, _ = cls.build_glsl_assignments(container.definitions)
+
+        return template.format(struct_definitions, block_definition, assignments)
 
     #@unittest.skip("test for development purposes")
     def test_manually(self):
@@ -306,21 +338,16 @@ void main() {{
         glsl = self.build_glsl_program(container, structs, buffer_usage)
         # print glsl
 
-        values, expected = self.build_input_values(container.definitions)
-        expected = np.array(expected, dtype=np.float32)
+        values, array_expected = self.build_values(container.definitions)
+        array_expected = np.array(array_expected, dtype=np.float32)
 
-        import time
-        t0 = time.time()
-        bbb = container.to_bytes(values)
-        dt = time.time() - t0
+        bytez_input = container.to_bytes(values)
+        bytez_output = self.run_program(glsl, bytez_input, array_expected.nbytes, usage_input=buffer_usage)
+        array = np.frombuffer(bytez_output, dtype=array_expected.dtype)
 
-        print "dt", dt
-
-        output = self.run_program(glsl, bbb, expected, usage_input=buffer_usage)
-
-        print expected
-        print output
-        print "equal", ((expected - output) == 0).all()
+        print array_expected
+        print array
+        print "equal", ((array_expected - array) == 0).all()
 
     def test_manually2(self):
         # buffer padding test
@@ -348,14 +375,16 @@ void main() {{
         glsl = self.build_glsl_program(container, structs, buffer_usage)
         # print glsl
 
-        values, expected = self.build_input_values(container.definitions)
-        expected = np.array(expected, dtype=np.float32)
+        values, array_expected = self.build_values(container.definitions)
+        array_expected = np.array(array_expected, dtype=np.float32)
 
-        output = self.run_program(glsl, container.to_bytes(values), expected, usage_input=buffer_usage)
+        bytez_input = container.to_bytes(values)
+        bytez_output = self.run_program(glsl, bytez_input, array_expected.nbytes, usage_input=buffer_usage)
+        array = np.frombuffer(bytez_output, dtype=array_expected.dtype)
 
-        print expected
-        print output
-        print "equal", ((expected - output) == 0).all()
+        print array_expected
+        print array
+        print "equal", ((array_expected - array) == 0).all()
 
     def test_manually3(self):
         # byte cache test
@@ -397,9 +426,85 @@ void main() {{
 
 
 class TestShaderToCpu(TestByteRepresentation):
+    """Transferring data in arbitrary order from the shader"""
+
+    @classmethod
+    def build_glsl_program(cls, container, structs, buffer_usage):
+        template = """
+#version 450
+#extension GL_ARB_separate_shader_objects : enable
+
+layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
+
+layout(std430, binding = 0) buffer dataOut {{
+    float array[];
+}}; // stdout430 so we have no array alignment fiddling
+
+{}
+
+{}
+
+
+void main() {{
+{}
+}}"""
+
+        struct_definitions = "\n\n".join([cls.build_glsl_struct_definition(struct) for struct in structs])
+        block_definition = cls.build_glsl_block_definition(container, binding=1, usage=buffer_usage)
+        assignments, _ = cls.build_glsl_assignments(container.definitions, to_array=False)
+
+        return template.format(struct_definitions, block_definition, assignments)
 
     #@unittest.skip("test for development purposes")
     def test_manually(self):
+        buffer_usage = BufferUsage.STORAGE_BUFFER
+        buffer_layout = Layout.STD140
+        buffer_order = Order.ROW_MAJOR
+
+        structA = Struct([Vector.ivec2(), Scalar.double()], buffer_layout, member_names=["a", "b"], type_name="structA")
+        structB = Struct([Scalar.uint(), Scalar.double()], buffer_layout, type_name="structB")
+        structC = Struct([structB, Vector.ivec2()], buffer_layout, type_name="structC")
+
+        structs = [structA, structB, structC]
+
+        variables = [
+            Vector.vec3(),
+            Vector.ivec4(),
+            Array(structC, 2, buffer_layout),
+            Vector.ivec4(),
+            Scalar.uint(),
+            Array(Scalar.double(), (5, 2), buffer_layout),
+            Scalar.int(),
+            Array(Vector.vec4(), (2, 3, 4), buffer_layout),
+            Vector.dvec2(),
+            structA
+        ]
+
+        container = Struct(variables, buffer_layout, type_name="block")
+        print container
+
+        glsl = self.build_glsl_program(container, structs, buffer_usage)
+        # print glsl
+
+        values_expected, array = self.build_values(container.definitions)
+        array = np.array(array, dtype=np.float32)
+
+        bytez_in = array.tobytes()  # std430
+        bytez_out = self.run_program(glsl, bytez_in, container.size())
+        values = container.from_bytes(bytez_out)
+
+        print ""
+        print values
+        print ""
+        print values_expected
+
+        # output = self.run_program(glsl, container.to_bytes(values), array, usage_input=buffer_usage)
+        #
+        # print array
+        # print output
+        # print "equal", ((array - output) == 0).all()
+
+    def test_manually2(self):
         glsl = """
             #version 450
             #extension GL_ARB_separate_shader_objects : enable
@@ -461,30 +566,6 @@ class TestShaderToCpu(TestByteRepresentation):
         print container.from_bytes(bytez_out)
 
 
-
-    @classmethod
-    def run_program(cls, glsl, bytez_input, bytez_output_length, usage_input=BufferUsage.STORAGE_BUFFER,
-                    usage_output=BufferUsage.STORAGE_BUFFER):
-        session = cls.SESSION
-        shader = cls.shader_from_txt(glsl)
-
-        buffer_in = cls.allocate_buffer(len(bytez_input), usage_input, MemoryType.CPU)
-        buffer_out = cls.allocate_buffer(bytez_output_length, usage_output, MemoryType.CPU)
-
-        buffer_in.map(bytez_input)
-
-        pipeline = Pipeline(session.device, shader, [buffer_in, buffer_out])
-        executor = Executor(session.device, pipeline, session.queue_index)
-
-        executor.record(1, 1, 1)
-        executor.execute_and_wait()
-
-        with buffer_out.mapped() as bytebuffer:
-            bytez_output = bytebuffer[:]
-
-        return bytez_output
-
-
 class TestMatrixIn(TestByteRepresentation):
 
     def test(self):
@@ -537,7 +618,7 @@ class TestArrayIn(TestByteRepresentation):
         matrix_order = Order.ROW_MAJOR
 
         shape = (2, 5)
-        expected = np.arange(np.product(shape), dtype=np.float32)
+        array_expected = np.arange(np.product(shape), dtype=np.float32)
 
         scalar_uint = Scalar.uint()
         scalar_double = Scalar.double()
@@ -552,19 +633,15 @@ class TestArrayIn(TestByteRepresentation):
         values = {
             scalar_uint: 111,
             scalar_double: 222.,
-            array_outer: expected.reshape(shape)
+            array_outer: array_expected.reshape(shape)
         }
 
-        size = container.size()
-        bytez = container.to_bytes(values)
+        bytez_input = container.to_bytes(values)
+        bytez_output = self.run_program(glsl, bytez_input, array_expected.nbytes)
+        array = np.frombuffer(bytez_output, dtype=array_expected.dtype)
 
-        print size
-        print len(bytez)
-
-        y = self.run_program(glsl, bytez, expected)
-
-        print expected
-        print y
+        print array_expected
+        print array
 
     def test2(self):
         glsl = """
@@ -602,7 +679,7 @@ class TestArrayIn(TestByteRepresentation):
         matrix_order = Order.ROW_MAJOR
 
         shape = (3, 5, 11)
-        expected = np.arange(np.product(shape), dtype=np.float32)
+        array_expected = np.arange(np.product(shape), dtype=np.float32)
 
         array = Array(Scalar.float(), shape, layout)
         order = [array]
@@ -610,19 +687,15 @@ class TestArrayIn(TestByteRepresentation):
         container = Struct(order, layout)
 
         values = {
-            array: expected.reshape(shape)
+            array: array_expected.reshape(shape)
         }
 
-        size = container.size()
-        bytez = container.to_bytes(values)
+        bytez_input = container.to_bytes(values)
+        bytez_output = self.run_program(glsl, bytez_input, array_expected.nbytes)
+        array = np.frombuffer(bytez_output, dtype=array_expected.dtype)
 
-        print size
-        print len(bytez)
-
-        y = self.run_program(glsl, bytez, expected)
-
-        print expected
-        print y
+        print array_expected
+        print array
 
 
 class TestStructIn(TestByteRepresentation):
@@ -671,7 +744,7 @@ class TestStructIn(TestByteRepresentation):
         layout = Layout.STD140
         matrix_order = Order.ROW_MAJOR
 
-        expected = np.zeros(12, dtype=np.float32)
+        array_expected = np.zeros(12, dtype=np.float32)
 
         scalar_uint = Scalar.uint()
         scalar_double = Scalar.double()
@@ -694,17 +767,12 @@ class TestStructIn(TestByteRepresentation):
             vector_double3: [-1., -3., -5.]
         }
 
-        size = container.size()
-        bytez = container.to_bytes(values)
+        bytez_input = container.to_bytes(values)
+        bytez_output = self.run_program(glsl, bytez_input, array_expected.nbytes)
+        array = np.frombuffer(bytez_output, dtype=array_expected.dtype)
 
-        print size
-        print len(bytez)
-        print container
-
-        y = self.run_program(glsl, bytez, expected)
-
-        print expected
-        print y
+        print array_expected
+        print array
 
     def test2(self):
         glsl = """
@@ -747,7 +815,7 @@ class TestStructIn(TestByteRepresentation):
         layout = Layout.STD140
         matrix_order = Order.ROW_MAJOR
 
-        expected = np.zeros(76, dtype=np.float32)
+        array_expected = np.zeros(76, dtype=np.float32)
 
         scalar_uint = Scalar.uint()
         scalar_double = Scalar.double()
@@ -770,16 +838,13 @@ class TestStructIn(TestByteRepresentation):
                 values_array[i].append({scalar_uint: j + 1, scalar_double: j + 0.1, vector: [-j, -j, -j]})
         values = {scalar_uint: 111, array_outer2: values_array}
 
-        size = container.size()
-        bytez = container.to_bytes(values)
-
-        print size
-        print len(bytez)
+        # TODO: works if struct padding_after is not used...
         print container
 
-        y = self.run_program(glsl, bytez, expected)
+        bytez_input = container.to_bytes(values)
+        bytez_output = self.run_program(glsl, bytez_input, array_expected.nbytes)
+        array = np.frombuffer(bytez_output, dtype=array_expected.dtype)
 
         np.set_printoptions(precision=3, suppress=True)
-
-        print expected, len(expected)
-        print y, len(y)
+        print array_expected
+        print array
