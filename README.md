@@ -69,3 +69,9 @@ numpy + shaders = <3
   * the bytecode contains offsets which can be used to check the offsets which are computed when transferring data to/from the gpu
   * this way the layout specified by the user can be confirmed
   * ideally the layout can be deduced at some point
+
+* 15.02.2019
+  * found a new bug introduced by that struct padding
+  * apparently the padding is not necessary for arrays of structs? (see TestStructIn.test2)
+  * almost everything is in place to generically test the bytes implementations exhaustively (just testing tons of combinations for peace of mind)
+  * iterating over multidimensional arrays is a reoccuring scheme, need to move that in a separete function/class/whatever

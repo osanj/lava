@@ -2,6 +2,7 @@
 
 import itertools
 import logging
+import pprint
 import unittest
 
 from lava.api.bytes import *
@@ -455,6 +456,98 @@ void main() {{
 
         return template.format(struct_definitions, block_definition, assignments)
 
+    @classmethod
+    def build_register(cls, register, definition, steps):
+        """Readable keys for values dict"""
+        simple_types = (Scalar, Vector)
+
+        if isinstance(definition, Struct):
+            if definition not in register:
+                register[definition] = "struct{}".format(steps[Struct])
+                steps[Struct] += 1
+
+            for d in definition.definitions:
+                if isinstance(d, simple_types):
+                    cls.build_register_simple(register, d, steps)
+                else:
+                    cls.build_register(register, d, steps)
+
+        elif isinstance(definition, Array):
+            if definition not in register:
+                register[definition] = "array{}".format(steps[Array])
+                steps[Array] += 1
+
+            d = definition.definition
+
+            if isinstance(d, simple_types):
+                cls.build_register_simple(register, d, steps)
+            else:
+                cls.build_register(register, d, steps)
+
+        else:
+            RuntimeError("Unexpected type {}".format(type(definition)))
+
+    @classmethod
+    def build_register_simple(cls, register, definition, steps):
+        if isinstance(definition, Scalar) and definition not in register:
+            register[definition] = "{}{}".format(definition.glsl_dtype(), steps[Scalar])
+            steps[Scalar] += 1
+
+        elif isinstance(definition, Vector) and definition not in register:
+            register[definition] = "vector{}".format(steps[Vector])
+            steps[Vector] += 1
+
+    @classmethod
+    def format_values(cls, definition, values, register):
+        """Values with readable keys and no numpy arrays (allows comparison with '==' operator)"""
+        simple_types = (Scalar, Vector)
+
+        if isinstance(definition, Struct):
+            data = []
+
+            for d in definition.definitions:
+                if isinstance(d, simple_types):
+                    # data[register[d]] = cls.format_values_simple(d, values[d])
+                    data.append((register[d], cls.format_values_simple(d, values[d])))
+                else:
+                    # data[register[d]] = cls.format_values(d, values[d], register)
+                    data.append((register[d], cls.format_values(d, values[d], register)))
+
+            return data
+
+        elif isinstance(definition, Array):
+            d = definition.definition
+            data = np.zeros(definition.shape()).tolist()
+
+            for indices in itertools.product(*[range(s) for s in definition.shape()]):
+                _tmp1 = values
+                _tmp2 = data
+
+                for index in indices[:-1]:
+                    _tmp1 = _tmp1[index]
+                    _tmp2 = _tmp2[index]
+
+                if isinstance(d, simple_types):
+                    _tmp2[indices[-1]] = cls.format_values_simple(d, _tmp1[indices[-1]])
+                else:
+                    _tmp2[indices[-1]] = cls.format_values(d, _tmp1[indices[-1]], register)
+
+            return data
+
+        else:
+            RuntimeError("Unexpected type {}".format(type(definition)))
+
+    @classmethod
+    def format_values_simple(cls, definition, value):
+        if isinstance(definition, Scalar):
+            return value
+        if isinstance(definition, Vector):
+            return value.tolist()
+
+    @classmethod
+    def print_formatted_values(cls, values_ftd):
+        pprint.pprint(values_ftd, width=200)
+
     #@unittest.skip("test for development purposes")
     def test_manually(self):
         buffer_usage = BufferUsage.STORAGE_BUFFER
@@ -493,16 +586,24 @@ void main() {{
         bytez_out = self.run_program(glsl, bytez_in, container.size())
         values = container.from_bytes(bytez_out)
 
-        print ""
-        print values
-        print ""
-        print values_expected
+        register = {}
+        steps = {Scalar: 0, Vector: 0, Array: 0, Struct: 0}
 
-        # output = self.run_program(glsl, container.to_bytes(values), array, usage_input=buffer_usage)
-        #
-        # print array
-        # print output
-        # print "equal", ((array - output) == 0).all()
+        for struct in structs + [container]:
+            self.build_register(register, struct, steps)
+
+        values_ftd = self.format_values(container, values, register)
+        values_expected_ftd = self.format_values(container, values_expected, register)
+
+        print ""
+        self.print_formatted_values(values_ftd)
+        print ""
+        self.print_formatted_values(values_expected_ftd)
+        print ""
+
+        print ""
+
+        print values_ftd == values_expected_ftd
 
     def test_manually2(self):
         glsl = """

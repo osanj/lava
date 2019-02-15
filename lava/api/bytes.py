@@ -462,6 +462,7 @@ class Array(ByteRepresentation):
                     _data = _data[index]
 
                 _data[indices[-1]] = self.definition.from_bytes(bytez[offset:offset + size])
+                offset += size
                 offset += (self.a - offset % self.a) % self.a  # bytes
 
             return values
