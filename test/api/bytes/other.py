@@ -8,18 +8,18 @@ from lava.api.bytes import Array, Vector, Scalar, Struct
 from lava.api.constants.spirv import Layout, Order
 from lava.api.constants.vk import BufferUsage
 
-from test.api.bytes.framework import TestByteRepresentation
+from test.api.base import GlslBasedTest
 
 logger = logging.getLogger(__name__)
 
 
-class TestMatrixIn(TestByteRepresentation):
+class TestMatrixIn(GlslBasedTest):
 
     def test(self):
         print "tbi"
 
 
-class TestArrayIn(TestByteRepresentation):
+class TestArrayIn(GlslBasedTest):
 
     """Transferring multidimensional arrays into the shader"""
 
@@ -145,7 +145,7 @@ class TestArrayIn(TestByteRepresentation):
         print array
 
 
-class TestStructIn(TestByteRepresentation):
+class TestStructIn(GlslBasedTest):
     """Transferring structs into the shader"""
 
     def test1(self):

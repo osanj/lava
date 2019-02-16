@@ -5,16 +5,16 @@ import pprint
 
 import numpy as np
 
-from lava.api.bytes import Array, Vector, Scalar, Struct
+from lava.api.bytes import Array, ByteCache, Vector, Scalar, Struct
 from lava.api.constants.spirv import Layout, Order
 from lava.api.constants.vk import BufferUsage
 
-from test.api.bytes.framework import TestByteRepresentation
+from test.api.base import GlslBasedTest
 
 logger = logging.getLogger(__name__)
 
 
-class TestByteCache(TestByteRepresentation):
+class TestByteCache(GlslBasedTest):
 
     def test_manually(self):
         # byte cache test

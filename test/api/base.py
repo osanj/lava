@@ -22,7 +22,7 @@ from test import TestUtil
 logger = logging.getLogger(__name__)
 
 
-class TestByteRepresentation(unittest.TestCase):
+class GlslBasedTest(unittest.TestCase):
 
     SESSION = None
     MEMORY = None

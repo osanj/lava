@@ -30,33 +30,6 @@ class ByteCode(object):
         self.types_array = self.find_array_types()
         self.types_struct = self.find_struct_types()
 
-        # print "scalars"
-        # print self.types_scalar
-        # print ""
-        # print "vectors"
-        # print self.types_vector
-        # print ""
-        # print "matrices"
-        # print self.types_matrix
-        # print ""
-        # print "array"
-        # print self.types_array
-        # print ""
-        # print "struct"
-        # print self.types_struct
-        # print ""
-        # print "names"
-        # names = []
-        # for idx in self.types_struct:
-        #     struct_name, member_names = self.find_names(idx)
-        #     offsets = self.find_offsets(idx)
-        #     names.append("  {}) {} {{ {} }}".format(idx, struct_name, ", ".join(["{}({})".format(*x) for x in zip(member_names, offsets)])))
-        # print "\n".join(names)
-        # print ""
-        # print "blocks"
-        # print self.find_blocks()
-        # print ""
-
     @classmethod
     def read_word(cls, bytez, offset=0):
         # word to unsigned integer

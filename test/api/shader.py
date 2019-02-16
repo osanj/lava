@@ -2,179 +2,279 @@
 
 import itertools
 import logging
-import time
 import unittest
 
-from lava.api.bytes import *
-from lava.api.constants.spirv import Layout
-from lava.api.shader import *
-from lava.session import Session
-from lava.util import compile_glsl
+import numpy as np
 
-from test import TestUtil
-#from test import TestSession
+from lava.api.bytes import Array, Vector, Scalar, Struct
+from lava.api.constants.spirv import DataType, Layout
+from lava.api.constants.vk import BufferUsage
+
+from test.api.base import GlslBasedTest, Random
 
 logger = logging.getLogger(__name__)
 
 
-class TestByteCodeInspection(unittest.TestCase):
-
-    SESSION = None
-    MEMORY = None
+class TestByteCodeInspection(GlslBasedTest):
 
     @classmethod
-    def setUpClass(cls):
-        logging.basicConfig(level=logging.DEBUG)
-        TestUtil.set_vulkan_environment_variables()
-        cls.SESSION = Session.discover()  # TestSession() ?
-        cls.MEMORY = {}
+    def build_glsl_program(cls, container_data, structs=()):
+        template = """
+            #version 450
+            #extension GL_ARB_separate_shader_objects : enable
+        
+            layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
+        
+            {}
+        
+            {}
+                
+            void main() {{
+            }}"""
 
-    @classmethod
-    def tearDownClass(cls):
-        del cls.SESSION
+        glsl_structs = "\n\n".join([cls.build_glsl_struct_definition(struct) for struct in structs])
 
-    # Util
+        glsl_blocks = []
+        for container, binding, usage in container_data:
+            glsl_blocks.append(cls.build_glsl_block_definition(container, binding, usage))
 
-    @classmethod
-    def shader_from_txt(cls, txt):
-        path_shader = TestUtil.write_to_temp_file(txt, suffix=".comp")
-        shader_path_spirv = compile_glsl(path_shader, verbose=True)
-        return Shader(cls.SESSION.device, shader_path_spirv)
+        return template.format(glsl_structs, "\n\n".join(glsl_blocks))
 
-    # Test
-
-    def test1(self):
+    @unittest.skip("test for development purposes")
+    def test_manual(self):
         glsl = """
-        #version 450
-        #extension GL_ARB_separate_shader_objects : enable
-        
-        layout(local_size_x=1, local_size_y=1, local_size_z=16) in;
-        //layout(local_size_x=100, local_size_y=1, local_size_z=1) in;
-        
-        struct Data1 {
-            vec3 var1;
-            ivec2 var2;
-        };
-        
-        struct Data2 {
-            double var1;
-            double var2;
-            Data1 var3;
-        };
-        
-        layout(std140, binding = 0) uniform uniIn
-        //layout(std430, binding = 0) readonly buffer bufIn
-        {
-            bool flag2;
-            vec2[5][2][3] abc;
-            float bufferIn[5];
-            //bool flag;
-            //mat4x4 model;
-            Data1[2] datas1;
-            Data2 datas2;
-        };
-        
-        //layout(std140, binding = 1) writeonly buffer bufOut
-        layout(std430, binding = 1) writeonly buffer bufOut
-        {
-            uint width;
-            uint height;
-            Data2 datas3;
-            float bufferOut[4];
-            uint asd;
-        };
-        
-        void main() {
-            uint index = gl_GlobalInvocationID.x;
-            //bufferOut[index] = bufferIn[index] + 1;
-        
-        }
-        """
+            #version 450
+            #extension GL_ARB_separate_shader_objects : enable
+
+            layout(local_size_x=1, local_size_y=1, local_size_z=16) in;
+            //layout(local_size_x=100, local_size_y=1, local_size_z=1) in;
+
+            struct Data1 {
+                vec3 var1;
+                ivec2 var2;
+            };
+
+            struct Data2 {
+                double var1;
+                double var2;
+                Data1 var3;
+            };
+
+            layout(std140, binding = 0) uniform uniIn
+            //layout(std430, binding = 0) readonly buffer bufIn
+            {
+                bool flag2;
+                vec2[5][2][3] abc;
+                float bufferIn[5];
+                //bool flag;
+                //mat4x4 model;
+                Data1[2] datas1;
+                Data2 datas2;
+            };
+
+            //layout(std140, binding = 1) writeonly buffer bufOut
+            layout(std430, binding = 1) writeonly buffer bufOut
+            {
+                uint width;
+                uint height;
+                Data2 datas3;
+                float bufferOut[4];
+                uint asd;
+            };
+
+            void main() {
+                uint index = gl_GlobalInvocationID.x;
+                //bufferOut[index] = bufferIn[index] + 1;
+
+            }
+            """
 
         shader = self.shader_from_txt(glsl)
-
-        # print ""
-        # print shader.byte_code
 
         shader.inspect()
 
         print shader.byte_code
 
-        # print shader.definitions_scalar
-        # print ""
-        # print shader.definitions_vector
-        # print ""
-        # print shader.definitions_array
-        # print ""
-        # print shader.definitions_struct
-        # print ""
+        print ""
+        print "scalars"
+        print shader.byte_code.types_scalar
+        print ""
+        print "vectors"
+        print shader.byte_code.types_vector
+        print ""
+        print "matrices"
+        print shader.byte_code.types_matrix
+        print ""
+        print "array"
+        print shader.byte_code.types_array
+        print ""
+        print "struct"
+        print shader.byte_code.types_struct
+        print ""
+        print "names"
+        names = []
+        for idx in shader.byte_code.types_struct:
+            struct_name, member_names = shader.byte_code.find_names(idx)
+            offsets = shader.byte_code.find_offsets(idx)
+            names.append("  {}) {} {{ {} }}".format(idx, struct_name, ", ".join(
+                ["{}({})".format(*x) for x in zip(member_names, offsets)])))
+        print "\n".join(names)
+        print ""
+        print "blocks"
+        print shader.byte_code.find_blocks()
+        print ""
 
-        # for index in shader.definitions_struct:
-        #     offsets_byte_code = shader.byte_code.find_offsets(index)
-        #     offsets_lava = shader.definitions_struct[index].offsets()
-        #     alignment = shader.definitions_struct[index].alignment()
-        #
-        #     print "#" + str(index)
-        #     print "byte_code", offsets_byte_code
-        #     print "lava     ", offsets_lava, "({})".format(alignment)
-        #     print offsets_byte_code == offsets_lava
-        #     print ""
+    def test_detection_type_nested_with_structs(self):
+        rng = np.random.RandomState(321)
 
-    def test2(self):
-        glsl = """
-        #version 450
-        #extension GL_ARB_separate_shader_objects : enable
+        simple = [Scalar.uint(), Scalar.int(), Scalar.float(), Scalar.double()]
+        simple += [Vector(n, dtype) for n, dtype in itertools.product(range(2, 5), DataType.ALL)]
 
-        layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
-        //layout(local_size_x=100, local_size_y=1, local_size_z=1) in;
+        for layout, _ in itertools.product([Layout.STD140, Layout.STD430], range(5)):
+            struct = Struct(rng.choice(simple, size=3, replace=False), layout, type_name="SomeStruct")
+            structs = [struct]
 
-        struct Data1 {
-            vec3 var1;
-            ivec2 var2;
-        };
+            for _ in range(4):
+                members = [structs[-1]] + rng.choice(simple, size=2, replace=False).tolist()
+                structs.append(Struct(rng.permutation(members), layout, type_name="SomeStruct{}".format(len(structs))))
 
-        layout(std140, binding = 0) uniform uniIn
-        //layout(std430, binding = 0) readonly buffer bufIn
-        {
-            float varIn1;
-            vec2[5][2][3] varIn2;
-            Data1[2] varIn3;
-            double varIn4;
-        };
+            container = structs[-1]
+            structs = structs[:-1]
 
-        void main() {
-            uint index = gl_GlobalInvocationID.x;
-            //bufferOut[index] = bufferIn[index] + 1;
-        }
-        """
+            glsl = self.build_glsl_program(((container, 0, BufferUsage.STORAGE_BUFFER),), structs)
+            shader = self.shader_from_txt(glsl, verbose=False)
+            shader.inspect()
 
-        shader = self.shader_from_txt(glsl)
+            definition, _ = shader.get_block(0)
+            self.assertTrue(container.compare(definition, quiet=True))
 
+    def test_detection_type_arrays(self):
+        rng = np.random.RandomState(321)
+        variables = [Scalar.uint(), Scalar.int(), Scalar.float(), Scalar.double()]
+        variables += [Vector(n, dtype) for n, dtype in itertools.product(range(2, 5), DataType.ALL)]
+
+        for definition, layout, _ in itertools.product(variables, [Layout.STD140, Layout.STD430], range(3)):
+            container = Struct([Array(definition, Random.shape(rng, 3, 5), layout)], layout)
+
+            glsl = self.build_glsl_program(((container, 0, BufferUsage.STORAGE_BUFFER),))
+            shader = self.shader_from_txt(glsl, verbose=False)
+            shader.inspect()
+
+            definition, _ = shader.get_block(0)
+            self.assertTrue(container.compare(definition, quiet=True))
+
+    def test_detection_layout_stdxxx_ssbo(self):
+        variables = [Scalar.uint(), Scalar.int(), Scalar.float(), Scalar.double()]
+        variables += [Vector(n, dtype) for n, dtype in itertools.product(range(2, 5), DataType.ALL)]
+
+        binding = 0
+        usage = BufferUsage.STORAGE_BUFFER
+
+        glsl_std140 = self.build_glsl_program(((Struct(variables, Layout.STD140), binding, usage),))
+        glsl_std430 = self.build_glsl_program(((Struct(variables, Layout.STD430), binding, usage),))
+
+        glsls = [glsl_std140, glsl_std430]
+
+        for glsl in glsls:
+            shader = self.shader_from_txt(glsl, verbose=False)
+            shader.inspect()
+
+            definition, detected_usage = shader.get_block(binding)
+
+            self.assertEqual(detected_usage, usage)
+            self.assertEqual(definition.layout, Layout.STDXXX)
+
+    def test_detection_layout_stdxxx_ubo(self):
+        variables = [Scalar.uint(), Scalar.int(), Scalar.float(), Scalar.double()]
+        variables += [Vector(n, dtype) for n, dtype in itertools.product(range(2, 5), DataType.ALL)]
+
+        binding = 0
+        usage = BufferUsage.UNIFORM_BUFFER
+
+        glsl = self.build_glsl_program(((Struct(variables, Layout.STD140), binding, usage),))
+        shader = self.shader_from_txt(glsl, verbose=False)
         shader.inspect()
 
-        print ""
-        print ""
+        definition, detected_usage = shader.get_block(binding)
 
-        buffer_layout = Layout.STD140
+        self.assertEqual(detected_usage, usage)
+        self.assertEqual(definition.layout, Layout.STD140)  # uniform buffer objects can not use std430
 
-        # struct1 = Struct([Vector.vec3(), Vector.ivec2()], buffer_layout, type_name="structB")
-        struct1 = Struct([Vector.vec3(), Vector.ivec3()], buffer_layout, type_name="structB")
+    def test_detection_name(self):
+        glsl = """
+            #version 450
+            #extension GL_ARB_separate_shader_objects : enable
 
-        variables = [
-            Scalar.float(),
-            Array(Vector.vec2(), (5, 2, 3), buffer_layout),
-            Array(struct1, 2, buffer_layout),
-            Scalar.double()
-        ]
+            layout(std140, binding = 0) buffer BufferA {
+                float var1;
+                double var2;
+                int var3;
+                uint var4;
+                vec3 var5;
+                ivec4 var6;
+                dvec2[5][5] var7;
+            };
 
-        block_manual = Struct(variables, buffer_layout, type_name="block")
+            void main() {}
+            """
+        shader = self.shader_from_txt(glsl, verbose=False)
+        shader.inspect()
 
-        block, _ = shader.get_block(0)
+        definition, _ = shader.get_block(0)
+        self.assertListEqual(definition.member_names, ["var{}".format(i) for i in range(1, 8)])
 
-        res = block.compare(block_manual, quiet=False)
-        print res
+    def test_detection_binding(self):
+        container = Struct([Scalar.int(), Vector.vec3()], Layout.STD140)
+
+        for binding, usage in itertools.product([0, 1, 2, 3, 4, 99, 512], [BufferUsage.UNIFORM_BUFFER, BufferUsage.STORAGE_BUFFER]):
+            glsl = self.build_glsl_program(((container, binding, usage),))
+            shader = self.shader_from_txt(glsl, verbose=False)
+            shader.inspect()
+
+            detected_definition, detected_usage = shader.get_block(binding)
+
+            self.assertEqual(detected_usage, usage)
+            equal = container.compare(detected_definition, quiet=True)
+            self.assertTrue(equal)
+
+    def test_struct_shared_between_different_layouts(self):
+        glsl = """
+            #version 450
+            #extension GL_ARB_separate_shader_objects : enable
+
+            struct Shared {
+                int var1;
+                double var2;
+            };
+
+            layout(std140, binding = 0) buffer BufferA {
+                uvec2 varA1;
+                Shared varA2; // expected offset 16
+            };
+            
+            layout(std430, binding = 1) buffer BufferB {
+                uvec2 varB1;
+                Shared varB2; // expected offset 8
+            };
+
+            void main() {}
+            """
+        shared_std140 = Struct([Scalar.int(), Scalar.double()], Layout.STD140)
+        shared_std430 = Struct([Scalar.int(), Scalar.double()], Layout.STD430)
+
+        container_std140 = Struct([Vector.uvec2(), shared_std140], Layout.STD140)
+        container_std430 = Struct([Vector.uvec2(), shared_std430], Layout.STD430)
+
+        shader = self.shader_from_txt(glsl, verbose=False)
+        shader.inspect()
+
+        definition0, _ = shader.get_block(0)
+        definition1, _ = shader.get_block(1)
+        self.assertTrue(container_std140.compare(definition0, quiet=True))
+        self.assertFalse(container_std140.compare(definition1, quiet=True))
+        self.assertFalse(container_std430.compare(definition0, quiet=True))
+        self.assertTrue(container_std430.compare(definition1, quiet=True))
 
 
-# tests:
-#  struct used in multiple blocks with different layouts
-#  different amount of blocks
+if __name__ == "__main__":
+    unittest.main()

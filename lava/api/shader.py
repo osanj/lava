@@ -157,12 +157,22 @@ class Shader(object):
             self.set_layout(index, Layout.STD430)
             match_std430 = offsets_bytecode == definition.offsets()
 
+            # deduce layout
             if match_std140 and not match_std430:
                 self.set_layout(index, Layout.STD140)
+
             elif not match_std140 and match_std430:
                 self.set_layout(index, Layout.STD430)
+
             elif match_std140 and match_std430:
-                self.set_layout(index, Layout.STDXXX)
+                _, usage = self.get_block_index(binding)
+
+                # std430 is not allowed for uniform buffer objects
+                if usage == BufferUsage.UNIFORM_BUFFER:
+                    self.set_layout(index, Layout.STD140)
+                else:
+                    self.set_layout(index, Layout.STDXXX)
+
             else:
                 raise RuntimeError("Found unexpected memory offsets")
 

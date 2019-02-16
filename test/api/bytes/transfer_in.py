@@ -10,39 +10,39 @@ from lava.api.bytes import Array, Vector, Scalar, Struct
 from lava.api.constants.spirv import DataType, Layout, Order
 from lava.api.constants.vk import BufferUsage
 
-from test.api.bytes.framework import TestByteRepresentation, Random
+from test.api.base import GlslBasedTest, Random
 
 logger = logging.getLogger(__name__)
 
 
-class TestCpuToShader(TestByteRepresentation):
+class TestCpuToShader(GlslBasedTest):
     """Transferring data in arbitrary order into the shader"""
 
     @classmethod
     def build_glsl_program(cls, container, structs, buffer_usage):
         template = """
-#version 450
-#extension GL_ARB_separate_shader_objects : enable
+            #version 450
+            #extension GL_ARB_separate_shader_objects : enable
+            
+            layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
+            
+            {}
+            
+            {}
+            
+            layout(std430, binding = 1) buffer dataOut {{
+                float array[];
+            }}; // stdout430 so we have no array alignment fiddling
+            
+            void main() {{
+            {}
+            }}"""
 
-layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
+        glsl_structs = "\n\n".join([cls.build_glsl_struct_definition(struct) for struct in structs])
+        glsl_block = cls.build_glsl_block_definition(container, binding=0, usage=buffer_usage)
+        glsl_assignments, _ = cls.build_glsl_assignments(container.definitions)
 
-{}
-
-{}
-
-layout(std430, binding = 1) buffer dataOut {{
-    float array[];
-}}; // stdout430 so we have no array alignment fiddling
-
-void main() {{
-{}
-}}"""
-
-        struct_definitions = "\n\n".join([cls.build_glsl_struct_definition(struct) for struct in structs])
-        block_definition = cls.build_glsl_block_definition(container, usage=buffer_usage)
-        assignments, _ = cls.build_glsl_assignments(container.definitions)
-
-        return template.format(struct_definitions, block_definition, assignments)
+        return template.format(glsl_structs, glsl_block, glsl_assignments)
 
     def run_test(self, container, structs, buffer_usage):
         glsl = self.build_glsl_program(container, structs, buffer_usage)
@@ -117,35 +117,36 @@ void main() {{
             containers_std140.append(Struct(rng.permutation(variables), Layout.STD140))
             containers_std430.append(Struct(rng.permutation(variables), Layout.STD430))
 
-        for container in containers_std140 + containers_std430:
+        for container in containers_std140:
+            self.run_test(container, [], BufferUsage.STORAGE_BUFFER)
+            self.run_test(container, [], BufferUsage.UNIFORM_BUFFER)
+        for container in containers_std430:
             self.run_test(container, [], BufferUsage.STORAGE_BUFFER)
 
     def test_array_of_scalars(self):
-        scalar_types = [Scalar.uint(), Scalar.int(), Scalar.float(), Scalar.double()]
         rng = np.random.RandomState(123)
-        containers = []
+        scalar_types = [Scalar.uint(), Scalar.int(), Scalar.float(), Scalar.double()]
 
         for definition, layout, _ in itertools.product(scalar_types, [Layout.STD140, Layout.STD430], range(5)):
-            containers.append(Struct([Array(definition, Random.shape(rng, 5, 7), layout)], layout))
+            container = Struct([Array(definition, Random.shape(rng, 5, 7), layout)], layout)
 
-        for container in containers:
             self.run_test(container, [], BufferUsage.STORAGE_BUFFER)
+            if layout == Layout.STD140:
+                self.run_test(container, [], BufferUsage.UNIFORM_BUFFER)
 
     def test_array_of_vectors(self):
-        vector_types = [Vector(n, dtype) for n, dtype in itertools.product(range(2, 5), DataType.ALL)]
         rng = np.random.RandomState(123)
-        containers = []
+        vector_types = [Vector(n, dtype) for n, dtype in itertools.product(range(2, 5), DataType.ALL)]
 
         for definition, layout, _ in itertools.product(vector_types, [Layout.STD140, Layout.STD430], range(5)):
-            containers.append(Struct([Array(definition, Random.shape(rng, 3, 5), layout)], layout))
+            container = Struct([Array(definition, Random.shape(rng, 3, 5), layout)], layout)
 
-        for container in containers:
             self.run_test(container, [], BufferUsage.STORAGE_BUFFER)
+            if layout == Layout.STD140:
+                self.run_test(container, [], BufferUsage.UNIFORM_BUFFER)
 
     def test_array_of_structs(self):
         rng = np.random.RandomState(123)
-        data = []
-
         simple = [Scalar.uint(), Scalar.int(), Scalar.float(), Scalar.double()]
         simple += [Vector(n, dtype) for n, dtype in itertools.product(range(2, 5), DataType.ALL)]
 
@@ -153,14 +154,13 @@ void main() {{
             struct = Struct(rng.choice(simple, size=3, replace=False), layout, type_name="SomeStruct")
             array = Array(struct, Random.shape(rng, 3, 5), layout)
             container = Struct([array], layout)
-            data.append((container, [struct]))
 
-        for container, structs in data:
-            self.run_test(container, structs, BufferUsage.STORAGE_BUFFER)
+            self.run_test(container, [struct], BufferUsage.STORAGE_BUFFER)
+            if layout == Layout.STD140:
+                self.run_test(container, [struct], BufferUsage.UNIFORM_BUFFER)
 
     def test_nested_with_structs(self):
         rng = np.random.RandomState(123)
-        data = []
 
         simple = [Scalar.uint(), Scalar.int(), Scalar.float(), Scalar.double()]
         simple += [Vector(n, dtype) for n, dtype in itertools.product(range(2, 5), DataType.ALL)]
@@ -173,14 +173,15 @@ void main() {{
                 members = [structs[-1]] + rng.choice(simple, size=2, replace=False).tolist()
                 structs.append(Struct(rng.permutation(members), layout, type_name="SomeStruct{}".format(len(structs))))
 
-            data.append((structs[-1], structs[:-1]))
+            container = structs[-1]
+            structs = structs[:-1]
 
-        for container, structs in data:
             self.run_test(container, structs, BufferUsage.STORAGE_BUFFER)
+            if layout == Layout.STD140:
+                self.run_test(container, structs, BufferUsage.UNIFORM_BUFFER)
 
     def test_nested_with_arrays_of_structs(self):
         rng = np.random.RandomState(123)
-        data = []
 
         simple = [Scalar.uint(), Scalar.int(), Scalar.float(), Scalar.double()]
         simple += [Vector(n, dtype) for n, dtype in itertools.product(range(2, 5), DataType.ALL)]
@@ -195,17 +196,19 @@ void main() {{
                 structs.append(Struct(rng.permutation(members), layout, type_name="SomeStruct{}".format(len(structs))))
                 arrays.append(Array(structs[-1], Random.shape(rng, 2, 3), layout))
 
-            data.append((structs[-1], structs[:-1]))
+            container = structs[-1]
+            structs = structs[:-1]
 
-        for container, structs in data:
             self.run_test(container, structs, BufferUsage.STORAGE_BUFFER)
+            if layout == Layout.STD140:
+                self.run_test(container, structs, BufferUsage.UNIFORM_BUFFER)
 
     def test_arb_example_std140(self):
         layout = Layout.STD430
 
         struct_a = Struct([
             Scalar.int(),
-            Vector.uvec2()
+            Vector.uvec2()  # actually bvec2
         ], layout, type_name="structA")
 
         struct_b = Struct([

@@ -535,7 +535,9 @@ class Struct(ByteRepresentation):
         return s
 
     def glsl_dtype(self):
-        return self.type_name or "structType?"
+        if self.type_name is None:
+            raise RuntimeError("Type name was not defined for structure")
+        return self.type_name
 
     def compare(self, other, path=(), quiet=True):
         if not self.compare_type(type(self), type(other), path, quiet):

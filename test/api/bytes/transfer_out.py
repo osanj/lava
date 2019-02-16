@@ -10,40 +10,40 @@ from lava.api.bytes import Array, Vector, Scalar, Struct
 from lava.api.constants.spirv import DataType, Layout, Order
 from lava.api.constants.vk import BufferUsage
 
-from test.api.bytes.framework import TestByteRepresentation, Random
+from test.api.base import GlslBasedTest, Random
 
 logger = logging.getLogger(__name__)
 
 
-class TestShaderToCpu(TestByteRepresentation):
+class TestShaderToCpu(GlslBasedTest):
     """Transferring data in arbitrary order from the shader"""
 
     @classmethod
     def build_glsl_program(cls, container, structs, buffer_usage):
         template = """
-#version 450
-#extension GL_ARB_separate_shader_objects : enable
+            #version 450
+            #extension GL_ARB_separate_shader_objects : enable
+            
+            layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
+            
+            layout(std430, binding = 0) buffer dataOut {{
+                float array[];
+            }}; // stdout430 so we have no array alignment fiddling
+            
+            {}
+            
+            {}
+            
+            
+            void main() {{
+            {}
+            }}"""
 
-layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
+        glsl_structs = "\n\n".join([cls.build_glsl_struct_definition(struct) for struct in structs])
+        glsl_block = cls.build_glsl_block_definition(container, binding=1, usage=buffer_usage)
+        glsl_assignments, _ = cls.build_glsl_assignments(container.definitions, to_array=False)
 
-layout(std430, binding = 0) buffer dataOut {{
-    float array[];
-}}; // stdout430 so we have no array alignment fiddling
-
-{}
-
-{}
-
-
-void main() {{
-{}
-}}"""
-
-        struct_definitions = "\n\n".join([cls.build_glsl_struct_definition(struct) for struct in structs])
-        block_definition = cls.build_glsl_block_definition(container, binding=1, usage=buffer_usage)
-        assignments, _ = cls.build_glsl_assignments(container.definitions, to_array=False)
-
-        return template.format(struct_definitions, block_definition, assignments)
+        return template.format(glsl_structs, glsl_block, glsl_assignments)
 
     def run_test(self, container, structs, buffer_usage):
         glsl = self.build_glsl_program(container, structs, buffer_usage)
