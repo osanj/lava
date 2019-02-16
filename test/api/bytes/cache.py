@@ -9,7 +9,7 @@ from lava.api.bytes import Array, Vector, Scalar, Struct
 from lava.api.constants.spirv import Layout, Order
 from lava.api.constants.vk import BufferUsage
 
-from test.api.bytes.base import TestByteRepresentation
+from test.api.bytes.framework import TestByteRepresentation
 
 logger = logging.getLogger(__name__)
 

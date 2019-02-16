@@ -41,12 +41,13 @@ class TestByteRepresentation(unittest.TestCase):
     # Util
 
     @classmethod
-    def shader_from_txt(cls, txt, verbose=True):
+    def shader_from_txt(cls, txt, verbose=True, clean_up=True):
         path_shader = TestUtil.write_to_temp_file(txt, suffix=".comp")
         shader_path_spirv = compile_glsl(path_shader, verbose)
         shader = Shader(cls.SESSION.device, shader_path_spirv)
-        os.remove(path_shader)
-        os.remove(shader_path_spirv)
+        if clean_up:
+            os.remove(path_shader)
+            os.remove(shader_path_spirv)
         return shader
 
     @classmethod
@@ -82,6 +83,11 @@ class TestByteRepresentation(unittest.TestCase):
 
         with buffer_out.mapped() as bytebuffer:
             bytez_output = bytebuffer[:]
+
+        del executor
+        del pipeline
+        cls.destroy_buffer(buffer_in)
+        cls.destroy_buffer(buffer_out)
 
         return bytez_output
 

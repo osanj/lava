@@ -584,8 +584,9 @@ class Struct(ByteRepresentation):
 
             values[d] = d.from_bytes(bytez[offset:offset + size])
 
-            offset += size
-            offset += (a - offset % a) % a  # padding after
+            # TODO: figure out when the following is needed
+            # offset += size
+            # offset += (a - offset % a) % a  # padding after
 
         return values
 
