@@ -73,5 +73,5 @@ numpy + shaders = <3
 * 15.02.2019
   * found a new bug introduced by that struct padding
   * apparently the padding is not necessary for arrays of structs? (see TestStructIn.test2)
-  * almost everything is in place to generically test the bytes implementations exhaustively (just testing tons of combinations for peace of mind)
+  * ~~almost everything is in place to generically test the bytes implementations exhaustively (just testing tons of combinations for peace of mind)~~
   * iterating over multidimensional arrays is a reoccuring scheme, need to move that in a separete function/class/whatever
