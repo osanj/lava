@@ -516,8 +516,10 @@ class Struct(ByteRepresentation):
             padding_before = (a - steps[-1] % a) % a
             steps[-1] = steps[-1] + padding_before  # update last step + size to next step
             steps.append(steps[-1] + d.size())
-            padding_after = (a - steps[-1] % a) % a
-            steps[-1] = steps[-1] + padding_after
+
+        a = self.alignment()
+        padding_after = (a - steps[-1] % a) % a
+        steps[-1] = steps[-1] + padding_after
 
         return steps
 
@@ -564,12 +566,12 @@ class Struct(ByteRepresentation):
             a = d.alignment()
             padding_before = (a - len(bytez) % a) % a
             bytez += bytearray(padding_before)
-
             bytez += d.to_bytes(values[d])
 
-            # TODO: figure out when the following is needed
-            # padding_after = (a - len(bytez) % a) % a
-            # bytez += bytearray(padding_after)
+        # padding at the end
+        a = self.alignment()
+        padding_after = (a - len(bytez) % a) % a
+        bytez += bytearray(padding_after)
 
         return bytez
 
@@ -581,13 +583,10 @@ class Struct(ByteRepresentation):
             a = d.alignment()
             offset += (a - offset % a) % a  # padding before
             size = d.size()
-
             values[d] = d.from_bytes(bytez[offset:offset + size])
+            offset += size
 
-            # TODO: figure out when the following is needed
-            # offset += size
-            # offset += (a - offset % a) % a  # padding after
-
+        # nothing needs to be done about the padding at the end
         return values
 
 

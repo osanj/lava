@@ -179,7 +179,7 @@ void main() {{
             self.run_test(container, structs, BufferUsage.STORAGE_BUFFER)
 
     def test_nested_with_arrays_of_structs(self):
-        rng = np.random.RandomState(23)
+        rng = np.random.RandomState(123)
         data = []
 
         simple = [Scalar.uint(), Scalar.int(), Scalar.float(), Scalar.double()]
@@ -200,42 +200,34 @@ void main() {{
         for container, structs in data:
             self.run_test(container, structs, BufferUsage.STORAGE_BUFFER)
 
-    def test_fix_this(self):
-        # buffer padding test
-        buffer_usage = BufferUsage.STORAGE_BUFFER
-        buffer_layout = Layout.STD430
-        buffer_order = Order.ROW_MAJOR
+    def test_arb_example_std140(self):
+        layout = Layout.STD430
 
-        struct1 = Struct([Vector.vec3(), Vector.ivec2()], buffer_layout, type_name="structB")
-        struct2 = Struct([Scalar.double(), Scalar.double(), struct1], buffer_layout, type_name="structC")
+        struct_a = Struct([
+            Scalar.int(),
+            Vector.uvec2()
+        ], layout, type_name="structA")
 
-        structs = [struct1, struct2]
+        struct_b = Struct([
+            Vector.uvec3(),
+            Vector.vec2(),
+            Array(Scalar.float(), 2, layout),
+            Vector.vec2(),
+            # Array(mat3, 2, layout)
+        ], layout, type_name="structB")
 
-        variables = [
-            Scalar.uint(),
-            Array(Vector.vec2(), (5, 2, 3), buffer_layout),
-            Array(Scalar.float(), 5, buffer_layout),
-            struct2,  # this struct needs padding at the end
-            Scalar.uint(),
-            Array(struct1, 2, buffer_layout)
-        ]
+        container = Struct([
+            Scalar.float(),
+            Vector.vec2(),
+            Vector.vec3(),
+            struct_a,
+            Scalar.float(),
+            Array(Scalar.float(), 2, layout),
+            # mat2x3
+            Array(struct_b, 2, layout)
+        ], layout)
 
-        container = Struct(variables, buffer_layout, type_name="block")
-        print container
-
-        glsl = self.build_glsl_program(container, structs, buffer_usage)
-        # print glsl
-
-        values, array_expected = self.build_values(container.definitions)
-        array_expected = np.array(array_expected, dtype=np.float32)
-
-        bytez_input = container.to_bytes(values)
-        bytez_output = self.run_program(glsl, bytez_input, array_expected.nbytes, usage_input=buffer_usage)
-        array = np.frombuffer(bytez_output, dtype=array_expected.dtype)
-
-        print array_expected
-        print array
-        print "equal", ((array_expected - array) == 0).all()
+        self.run_test(container, [struct_a, struct_b], BufferUsage.STORAGE_BUFFER)
 
 
 if __name__ == "__main__":
