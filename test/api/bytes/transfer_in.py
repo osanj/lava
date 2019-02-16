@@ -1,15 +1,16 @@
 # -*- coding: UTF-8 -*-
 
+import itertools
 import logging
 import unittest
 
 import numpy as np
 
 from lava.api.bytes import Array, Vector, Scalar, Struct
-from lava.api.constants.spirv import Layout, Order
+from lava.api.constants.spirv import DataType, Layout, Order
 from lava.api.constants.vk import BufferUsage
 
-from test.api.bytes.base import TestByteRepresentation
+from test.api.bytes.base import TestByteRepresentation, Random
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,24 @@ void main() {{
         assignments, _ = cls.build_glsl_assignments(container.definitions)
 
         return template.format(struct_definitions, block_definition, assignments)
+
+    def run_test(self, container, structs, buffer_usage):
+        glsl = self.build_glsl_program(container, structs, buffer_usage)
+
+        values, array_expected = self.build_values(container.definitions)
+        array_expected = np.array(array_expected, dtype=np.float32)
+
+        bytez_input = container.to_bytes(values)
+        bytez_output = self.run_program(glsl, bytez_input, array_expected.nbytes, usage_input=buffer_usage, verbose=False)
+        array = np.frombuffer(bytez_output, dtype=array_expected.dtype)
+
+        diff = array_expected - array
+        equal = (diff == 0).all()
+        if not equal:
+            np.set_printoptions(precision=3, suppress=True)
+            print "{}\n".format(glsl)
+            print "{}\nexpected\n{}\nactual\n{}\ndiff\n{}\n".format(container, array_expected, array, diff)
+        self.assertTrue(equal)
 
     @unittest.skip("test for development purposes")
     def test_manual(self):
@@ -85,32 +104,48 @@ void main() {{
         print array
         print "equal", ((array_expected - array) == 0).all()
 
-    def test_generic(self):
-        i = 0
+    def test_scalars_and_vectors(self):
+        rng = np.random.RandomState(123)
 
-        for data in self.generic_data():
-            self.generic_test(i, *data)
-            i += 1
+        variables = [Scalar.uint(), Scalar.int(), Scalar.float(), Scalar.double()]
+        variables += [Vector(n, dtype) for n, dtype in itertools.product(range(2, 5), DataType.ALL)]
 
-    def generic_test(self, index, container, structs, buffer_usage):
-        glsl = self.build_glsl_program(container, structs, buffer_usage)
+        containers_std140 = [Struct(variables, Layout.STD140)]
+        containers_std430 = [Struct(variables, Layout.STD430)]
 
-        values, array_expected = self.build_values(container.definitions)
-        array_expected = np.array(array_expected, dtype=np.float32)
+        for i in range(5):
+            containers_std140.append(Struct(rng.permutation(variables), Layout.STD140))
+            containers_std430.append(Struct(rng.permutation(variables), Layout.STD430))
 
-        bytez_input = container.to_bytes(values)
-        bytez_output = self.run_program(glsl, bytez_input, array_expected.nbytes, usage_input=buffer_usage, verbose=False)
-        array = np.frombuffer(bytez_output, dtype=array_expected.dtype)
+        for container in containers_std140 + containers_std430:
+            self.run_test(container, [], BufferUsage.STORAGE_BUFFER)
 
-        equal = ((array_expected - array) == 0).all()
-        if not equal:
-            print "index"
-            print "some debug stuff"
-        self.assertTrue(equal)
+    def test_arrays_of_scalars(self):
+        scalar_types = [Scalar.uint(), Scalar.int(), Scalar.float(), Scalar.double()]
+        rng = np.random.RandomState(123)
+        containers = []
+
+        for definition, _ in itertools.product(scalar_types, range(5)):
+            containers.append(Struct([Array(definition, Random.shape(rng, 5, 10), Layout.STD140)], Layout.STD140))
+            containers.append(Struct([Array(definition, Random.shape(rng, 5, 10), Layout.STD430)], Layout.STD430))
+
+        for container in containers:
+            self.run_test(container, [], BufferUsage.STORAGE_BUFFER)
+
+    def test_vectors(self):
+        vector_types = [Vector(n, dtype) for n, dtype in itertools.product(range(2, 5), DataType.ALL)]
+        rng = np.random.RandomState(123)
+        containers = []
+
+        for definition, _ in itertools.product(vector_types, range(5)):
+            containers.append(Struct([Array(definition, Random.shape(rng, 5, 10), Layout.STD140)], Layout.STD140))
+            containers.append(Struct([Array(definition, Random.shape(rng, 5, 10), Layout.STD430)], Layout.STD430))
+
+        for container in containers:
+            self.run_test(container, [], BufferUsage.STORAGE_BUFFER)
 
 
-
-    # def test_manually2(self):
+# def test_manually2(self):
     #     # buffer padding test
     #     buffer_usage = BufferUsage.STORAGE_BUFFER
     #     buffer_layout = Layout.STD430
@@ -146,3 +181,7 @@ void main() {{
     #     print array_expected
     #     print array
     #     print "equal", ((array_expected - array) == 0).all()
+
+
+if __name__ == "__main__":
+    unittest.main()

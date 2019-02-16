@@ -567,8 +567,9 @@ class Struct(ByteRepresentation):
 
             bytez += d.to_bytes(values[d])
 
-            padding_after = (a - len(bytez) % a) % a
-            bytez += bytearray(padding_after)
+            # TODO: figure out when the following is needed
+            # padding_after = (a - len(bytez) % a) % a
+            # bytez += bytearray(padding_after)
 
         return bytez
 

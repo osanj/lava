@@ -12,7 +12,7 @@ EXT_SPIR_V = ".spv"
 ENV_SDK_NAME_LINUX = "VULKAN_SDK"
 
 
-def compile_glsl(path, verbose=False):
+def compile_glsl(path, verbose=True):
     path_output = path + EXT_SPIR_V
 
     # Linux
@@ -39,5 +39,6 @@ def compile_glsl(path, verbose=False):
     else:
         raise NotImplementedError()
 
-    logger.info("Compiled shader {}".format(path))
+    if verbose:
+        logger.info("Compiled shader {}".format(path))
     return path_output

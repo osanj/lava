@@ -12,6 +12,8 @@ class DataType(object):
     FLOAT = "float"
     DOUBLE = "double"
 
+    ALL = [INT, UINT, FLOAT, DOUBLE]
+
 
 class Layout(object):
     STD140 = "std140"

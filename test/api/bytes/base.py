@@ -2,6 +2,7 @@
 
 import itertools
 import logging
+import os
 import pprint
 import unittest
 
@@ -43,7 +44,10 @@ class TestByteRepresentation(unittest.TestCase):
     def shader_from_txt(cls, txt, verbose=True):
         path_shader = TestUtil.write_to_temp_file(txt, suffix=".comp")
         shader_path_spirv = compile_glsl(path_shader, verbose)
-        return Shader(cls.SESSION.device, shader_path_spirv)
+        shader = Shader(cls.SESSION.device, shader_path_spirv)
+        os.remove(path_shader)
+        os.remove(shader_path_spirv)
+        return shader
 
     @classmethod
     def allocate_buffer(cls, size, usage, types):
@@ -365,3 +369,12 @@ class TestByteRepresentation(unittest.TestCase):
     @classmethod
     def print_formatted_values(cls, values_ftd):
         pprint.pprint(values_ftd, width=200)
+
+
+class Random(object):
+
+    @classmethod
+    def shape(cls, rng, max_dims, max_dim, min_dims=1, min_dim=1):
+        dims = rng.randint(min_dims, max_dims + 1)
+        return tuple(rng.randint(min_dim, max_dim, dims))
+
