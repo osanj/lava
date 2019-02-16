@@ -398,9 +398,9 @@ class Array(ByteRepresentation):
         if isinstance(self.definition, Scalar):
             return self.to_bytes_for_scalars(values)
 
-        # elif isinstance(self.definition, Vector):
-        #     return self.to_bytes_for_vectors(values)
-        #
+        elif isinstance(self.definition, Vector):
+            return self.to_bytes_for_vectors(values)
+
         # elif isinstance(self.definition, Matrix):
         #     return self.to_bytes_for_matrices(values)
 
@@ -425,8 +425,8 @@ class Array(ByteRepresentation):
     def to_bytes_for_scalars(self, array):
         if not isinstance(array, np.ndarray):
             raise RuntimeError("Incorrect datatype {}, expected {}".format(type(array), np.ndarray))
-        # if array.dtype is not self.definition.numpy_dtype():
-        #     raise RuntimeError("Incorrect datatype {}, expected {}".format(array.dtype, self.definition.numpy_dtype()))
+        if array.dtype != self.definition.numpy_dtype():
+            raise RuntimeError("Incorrect datatype {}, expected {}".format(array.dtype, self.definition.numpy_dtype()))
         if tuple(array.shape) != self.shape():
             raise RuntimeError("Array has shape {}, expected {}".format(array.shape, self.shape()))
 
@@ -440,13 +440,33 @@ class Array(ByteRepresentation):
         # for std430 the following would be sufficient: return array.flatten().tobytes()
         return array_padded.tobytes()
 
+    def to_bytes_for_vectors(self, array):
+        numpy_dtype = self.definition.scalar.numpy_dtype()
+        shape = tuple(list(self.shape()) + [self.definition.length()])
+
+        if not isinstance(array, np.ndarray):
+            raise RuntimeError("Incorrect datatype {}, expected {}".format(type(array), np.ndarray))
+        if array.dtype != numpy_dtype:
+            raise RuntimeError("Incorrect datatype {}, expected {}".format(array.dtype, numpy_dtype))
+        if tuple(array.shape) != shape:
+            raise RuntimeError("Array has shape {}, expected {}".format(array.shape, shape))
+
+        p = (self.a - self.definition.size()) / self.definition.scalar.size()
+        a = self.a / self.definition.scalar.size()
+
+        array_padded = np.zeros(a * np.product(shape[:-1]), dtype=array.dtype)
+        mask = (np.arange(len(array_padded)) % a) < (a - p)
+        array_padded[mask] = array.flatten()
+
+        return array_padded.tobytes()
+
     def from_bytes(self, bytez):
         if isinstance(self.definition, Scalar):
             return self.from_bytes_for_scalars(bytez)
 
-        # elif isinstance(self.definition, Vector):
-        #     return self.to_bytes_for_vectors(values)
-        #
+        elif isinstance(self.definition, Vector):
+            return self.from_bytes_for_vectors(bytez)
+
         # elif isinstance(self.definition, Matrix):
         #     return self.to_bytes_for_matrices(values)
 
@@ -474,6 +494,15 @@ class Array(ByteRepresentation):
         array_padded = np.frombuffer(bytez, dtype=self.definition.numpy_dtype())
         mask = (np.arange(a * np.product(self.shape())) % a) < (a - p)
         return array_padded[mask].reshape(self.shape())
+
+    def from_bytes_for_vectors(self, bytez):
+        shape = tuple(list(self.shape()) + [self.definition.length()])
+        p = (self.a - self.definition.size()) / self.definition.scalar.size()
+        a = self.a / self.definition.scalar.size()
+
+        array_padded = np.frombuffer(bytez, dtype=self.definition.scalar.numpy_dtype())
+        mask = (np.arange(a * np.product(shape[:-1])) % a) < (a - p)
+        return array_padded[mask].reshape(shape)
 
 
 class Struct(ByteRepresentation):
