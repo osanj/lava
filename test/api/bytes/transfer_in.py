@@ -6,7 +6,7 @@ import unittest
 
 import numpy as np
 
-from lava.api.bytes import Array, Vector, Scalar, Struct
+from lava.api.bytes import Array, Matrix, Vector, Scalar, Struct
 from lava.api.constants.spirv import DataType, Layout, Order
 from lava.api.constants.vk import BufferUsage
 
@@ -123,6 +123,40 @@ class TestCpuToShader(GlslBasedTest):
         for container in containers_std430:
             self.run_test(container, [], BufferUsage.STORAGE_BUFFER)
 
+    def test_scalars_and_vectors_and_matrices(self):
+        rng = np.random.RandomState(123)
+
+        variables = [Scalar.uint(), Scalar.int(), Scalar.float(), Scalar.double()]
+        variables += [Vector(n, dtype) for n, dtype in itertools.product(range(2, 5), DataType.ALL)]
+
+        matrix_combinations = itertools.product(range(2, 5), range(2, 5), [DataType.FLOAT, DataType.DOUBLE])
+        variables_std140 = variables + [Matrix(n, m, dtype, Layout.STD140) for n, m, dtype in matrix_combinations]
+        variables_std430 = variables + [Matrix(n, m, dtype, Layout.STD430) for n, m, dtype in matrix_combinations]
+
+        containers_std140 = [Struct(variables_std140, Layout.STD140)]
+        containers_std430 = [Struct(variables_std430, Layout.STD430)]
+
+        for _ in range(5):
+            containers_std140.append(Struct(rng.permutation(variables_std140), Layout.STD140))
+            containers_std430.append(Struct(rng.permutation(variables_std430), Layout.STD430))
+
+        for container in containers_std140:
+            self.run_test(container, [], BufferUsage.STORAGE_BUFFER)
+            self.run_test(container, [], BufferUsage.UNIFORM_BUFFER)
+        for container in containers_std430:
+            self.run_test(container, [], BufferUsage.STORAGE_BUFFER)
+
+    def test_matrices(self):
+        # skipping ROW_MAJOR order for now since the glsl generation does not support it
+        for n, m, dtype, order, layout in itertools.product(range(2, 5), range(2, 5), [DataType.FLOAT, DataType.DOUBLE],
+                                                            [Order.COLUMN_MAJOR], [Layout.STD140, Layout.STD430]):
+            matrix = Matrix(n, m, dtype, layout, order)
+            container = Struct([matrix], layout)
+
+            self.run_test(container, [], BufferUsage.STORAGE_BUFFER)
+            if layout == Layout.STD140:
+                self.run_test(container, [], BufferUsage.UNIFORM_BUFFER)
+
     def test_array_of_scalars(self):
         rng = np.random.RandomState(123)
         scalar_types = [Scalar.uint(), Scalar.int(), Scalar.float(), Scalar.double()]
@@ -140,6 +174,19 @@ class TestCpuToShader(GlslBasedTest):
 
         for definition, layout, _ in itertools.product(vector_types, [Layout.STD140, Layout.STD430], range(5)):
             container = Struct([Array(definition, Random.shape(rng, 3, 5), layout)], layout)
+
+            self.run_test(container, [], BufferUsage.STORAGE_BUFFER)
+            if layout == Layout.STD140:
+                self.run_test(container, [], BufferUsage.UNIFORM_BUFFER)
+
+    def test_array_of_matrices(self):
+        # skipping ROW_MAJOR order for now since the glsl generation does not support it
+        rng = np.random.RandomState(123)
+        matrix_combinations = itertools.product(range(2, 5), range(2, 5), [DataType.FLOAT, DataType.DOUBLE])
+
+        for (n, m, dtype), layout, _ in itertools.product(matrix_combinations, [Layout.STD140, Layout.STD430], range(3)):
+            matrix = Matrix(n, m, dtype, layout)
+            container = Struct([Array(matrix, Random.shape(rng, 3, 5), layout)], layout)
 
             self.run_test(container, [], BufferUsage.STORAGE_BUFFER)
             if layout == Layout.STD140:

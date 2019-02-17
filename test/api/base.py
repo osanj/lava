@@ -8,7 +8,7 @@ import unittest
 
 import numpy as np
 
-from lava.api.bytes import Array, Vector, Scalar, Struct
+from lava.api.bytes import Array, Matrix, Vector, Scalar, Struct
 from lava.api.constants.spirv import Layout, Order
 from lava.api.constants.vk import BufferUsage, MemoryType
 from lava.api.memory import Buffer
@@ -97,6 +97,7 @@ class GlslBasedTest(unittest.TestCase):
 
     @classmethod
     def build_glsl_block_definition(cls, container, binding=0, usage=BufferUsage.STORAGE_BUFFER):
+        # TODO: extend for matrix order?
         glsl = "layout({}, binding = {}) {} dataIn {{".format(
             "std140" if container.layout == Layout.STD140 else "std430", binding,
             "buffer" if usage == BufferUsage.STORAGE_BUFFER else "uniform", )
@@ -133,9 +134,9 @@ class GlslBasedTest(unittest.TestCase):
                 var_name_complete = var_name or cls.generate_var_name(d, i, var_name_prefix)
                 glsl_code, step = cls.build_glsl_assignments_vector(d, j, var_name_complete, array_name, to_array=to_array)
 
-            # elif isinstance(d, Matrix):
-            #     var_name_complete = var_name or cls.generate_var_name(d, i, var_name_prefix)
-            #     glsl_code, step = cls.build_glsl_assignments_matrix(d, j, var_name_complete, array_name, to_array=to_array)
+            elif isinstance(d, Matrix):
+                var_name_complete = var_name or cls.generate_var_name(d, i, var_name_prefix)
+                glsl_code, step = cls.build_glsl_assignments_matrix(d, j, var_name_complete, array_name, to_array=to_array)
 
             elif isinstance(d, Array):
                 var_name_complete = var_name or cls.generate_var_name(d, i, var_name_prefix)
@@ -188,12 +189,12 @@ class GlslBasedTest(unittest.TestCase):
     @classmethod
     def build_glsl_assignments_matrix(cls, dfn, i, var_name_complete, array_name="array", to_array=True):
         glsl = ""
-        cols, rows = dfn.n, dfn.m
-        for k, r, c in enumerate(itertools.product(range(cols), range(rows))):
+        cols, rows = dfn.cols, dfn.rows
+        for k, (r, c) in enumerate(itertools.product(range(rows), range(cols))):
             if to_array:
                 glsl += "{}[{}] = float({}[{}][{}]);".format(array_name, i + k, var_name_complete, c, r)
             else:
-                glsl += "{}[{}][{}] = {}({}[{}]);".format(var_name_complete, c, r, dfn.scalar.glsl_dtype(), array_name, i + k)
+                glsl += "{}[{}][{}] = {}({}[{}]);".format(var_name_complete, c, r, dfn.vector.scalar.glsl_dtype(), array_name, i + k)
             glsl += "\n"
         return glsl, cols * rows
 
@@ -207,8 +208,8 @@ class GlslBasedTest(unittest.TestCase):
             glsl_dtype = dfn.definition.glsl_dtype()
         if isinstance(dfn.definition, Vector):
             glsl_dtype = dfn.definition.scalar.glsl_dtype()
-        # if isinstance(dfn.definition, Matrix):
-        #     glsl_dtype = dfn.definition.scalar.glsl_dtype()
+        if isinstance(dfn.definition, Matrix):
+            glsl_dtype = dfn.definition.scalar.glsl_dtype()
 
         for k, indices in enumerate(itertools.product(*[range(d) for d in dims])):
             var_name_complete_with_indices = ("{}" + "[{}]" * len(dims)).format(var_name_complete, *indices)
@@ -247,11 +248,12 @@ class GlslBasedTest(unittest.TestCase):
                 values_raw.extend(values_mapped[d])
                 count += d.length()
 
-            # elif isinstance(d, Matrix):
-            #     rows, cols = d.shape()
-            #     values_mapped[d] = np.arange(count, count + rows * cols, dtype=d.scalar.numpy_dtype())
-            #     values_raw.extend(values_mapped[d])
-            #     count += rows * cols
+            elif isinstance(d, Matrix):
+                rows, cols = d.shape()
+                values_flat = np.arange(count, count + rows * cols, dtype=d.vector.scalar.numpy_dtype())
+                values_mapped[d] = values_flat.reshape(rows, cols)
+                values_raw.extend(values_flat)
+                count += rows * cols
 
             elif isinstance(d, Array):
                 if isinstance(d.definition, Scalar):
@@ -296,7 +298,7 @@ class GlslBasedTest(unittest.TestCase):
     @classmethod
     def build_register(cls, register, definition, steps):
         """Readable keys for values dict"""
-        simple_types = (Scalar, Vector)
+        simple_types = (Scalar, Vector, Matrix)
 
         if isinstance(definition, Struct):
             if definition not in register:
@@ -334,10 +336,14 @@ class GlslBasedTest(unittest.TestCase):
             register[definition] = "vector{}".format(steps[Vector])
             steps[Vector] += 1
 
+        elif isinstance(definition, Matrix) and definition not in register:
+            register[definition] = "matrix{}".format(steps[Matrix])
+            steps[Matrix] += 1
+
     @classmethod
     def format_values(cls, definition, values, register):
         """Values with readable keys and no numpy arrays (allows comparison with '==' operator)"""
-        simple_types = (Scalar, Vector)
+        simple_types = (Scalar, Vector, Matrix)
 
         if isinstance(definition, Struct):
             data = []
@@ -379,6 +385,8 @@ class GlslBasedTest(unittest.TestCase):
         if isinstance(definition, Scalar):
             return value
         if isinstance(definition, Vector):
+            return value.tolist()
+        if isinstance(definition, Matrix):
             return value.tolist()
 
     @classmethod

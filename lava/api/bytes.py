@@ -5,7 +5,7 @@ import logging
 
 import numpy as np
 
-from lava.api.constants.spirv import DataType, Layout
+from lava.api.constants.spirv import DataType, Layout, Order
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +60,24 @@ class ByteRepresentation(object):
                     "Expected layout {}, but got layout {} at {}".format(layout_expected, layout_other, " > ".join(path)))
             return False
 
+        return True
+
+    @classmethod
+    def compare_order(cls, order_expected, order_other, path, quiet=True):
+        if order_expected != order_other:
+            if not quiet:
+                raise RuntimeError(
+                    "Expected layout {}, but got layout {} at {}".format(order_expected, order_other, " > ".join(path)))
+            return False
+        return True
+
+    @classmethod
+    def compare_shape(cls, shape_expected, shape_other, path, quiet):
+        if shape_expected != shape_other:
+            if not quiet:
+                raise RuntimeError("Expected shape {}, but got shape {} at {}".format(shape_expected, shape_other,
+                                                                                      " > ".join(path)))
+            return False
         return True
 
     def compare(self, other, path, quiet=True):
@@ -224,7 +242,7 @@ class ScalarDouble(Scalar):
 
 class Vector(ByteRepresentation):
 
-    def __init__(self, n=4, dtype=DataType.FLOAT):
+    def __init__(self, n, dtype):
         super(Vector, self).__init__()
         self.dtype = dtype
         self.n = n
@@ -330,6 +348,107 @@ class Vector(ByteRepresentation):
         return np.frombuffer(bytez, self.scalar.numpy_dtype())[:self.n]
 
 
+class Matrix(ByteRepresentation):
+
+    DEFAULT_ORDER = Order.COLUMN_MAJOR
+
+    def __init__(self, cols, rows, dtype, layout, order=DEFAULT_ORDER):
+        super(Matrix, self).__init__()
+        if dtype not in (DataType.FLOAT, DataType.DOUBLE):
+            raise RuntimeError("Matrices of type {} are not supported".format(dtype))
+        self.dtype = dtype
+        self.cols = cols
+        self.rows = rows
+        self.order = order
+        self.vector = Vector(rows if order == Order.COLUMN_MAJOR else cols, dtype)
+        self.vector_count = cols if order == Order.COLUMN_MAJOR else rows
+        self.layout = layout
+
+    @property
+    def layout(self):
+        return self._layout
+
+    @layout.setter
+    def layout(self, layout):
+        self._layout = layout
+        self.a = None
+        self.precompute_alignment()
+
+    def precompute_alignment(self):
+        if self.layout in [Layout.STD140, Layout.STD430, Layout.STDXXX]:
+            self.a = self.vector.alignment()
+
+            if self.layout == Layout.STD140:
+                self.a += (16 - self.a % 16) % 16
+
+    def size(self):
+        s = self.vector.size()
+        s += (self.a - s % self.a) % self.a  # pad to array stride
+        return s * self.vector_count
+
+    def shape(self):
+        return self.rows, self.cols
+
+    def alignment(self):
+        return self.a
+
+    def __str__(self, name=None, indent=2):
+        return "{} [{}]".format(self.glsl_dtype(), name or "?")
+
+    def glsl_dtype(self):
+        return "{}mat{}x{}".format(self.dtype.lower()[0] if self.dtype is not DataType.FLOAT else "", self.cols, self.rows)
+
+    def compare(self, other, path=(), quiet=True):
+        if not self.compare_type(type(self), type(other), path, quiet):
+            return False
+        if not self.compare_layout(self.layout, other.layout, path, quiet):
+            return False
+        if not self.compare_shape(self.shape(), other.shape(), path, quiet):
+            return False
+        return True
+
+    def to_bytes(self, array):
+        bytez = bytearray()
+
+        if self.order == Order.COLUMN_MAJOR:
+            for col in range(self.cols):
+                bytez += self.vector.to_bytes([array[row][col] for row in range(self.rows)])
+                padding = (self.a - len(bytez) % self.a) % self.a
+                bytez += bytearray(padding)
+
+        if self.order == Order.ROW_MAJOR:
+            print self.rows
+            for row in range(self.rows):
+                bytez += self.vector.to_bytes([array[row][col] for col in range(self.cols)])
+                padding = (self.a - len(bytez) % self.a) % self.a
+                bytez += bytearray(padding)
+
+        return bytez
+
+    def from_bytes(self, bytez):
+        array = np.zeros((self.rows, self.cols), dtype=self.vector.scalar.numpy_dtype())
+        offset = 0
+        size = self.vector.size()
+
+        if self.order == Order.COLUMN_MAJOR:
+            for col in range(self.cols):
+                array[:, col] = self.vector.from_bytes(bytez[offset:offset + size])
+                offset += size
+                offset += (self.a - offset % self.a) % self.a  # bytes
+
+            return array
+
+        if self.order == Order.ROW_MAJOR:
+            for row in range(self.rows):
+                array[row, :] = self.vector.from_bytes(bytez[offset:offset + size])
+                offset += size
+                offset += (self.a - offset % self.a) % self.a  # bytes
+
+            return array
+
+        return None
+
+
 class Array(ByteRepresentation):
 
     def __init__(self, definition, dims, layout):
@@ -380,18 +499,11 @@ class Array(ByteRepresentation):
             return False
         if not self.compare_layout(self.layout, other.layout, path, quiet):
             return False
-
-        shape_expected = self.shape()
-        shape_other = other.shape()
-
-        if shape_expected != shape_other:
-            if not quiet:
-                raise RuntimeError("Expected array shape {}, but got shape {} at {}".format(shape_expected, shape_other,
-                                                                                            " > ".join(path)))
+        if not self.compare_shape(self.shape(), other.shape(), path, quiet):
             return False
 
         return self.definition.compare(other.definition,
-                                       list(path) + ["array {}".format("x".join(map(str, shape_expected)))],
+                                       list(path) + ["array {}".format("x".join(map(str, self.shape())))],
                                        quiet)
 
     def to_bytes(self, values):
@@ -701,60 +813,6 @@ class ByteCache(object):
         pass
 
 
-# class Matrix(ByteRepresentation):
-#
-#     def __init__(self, n=4, m=4, dtype=ByteRepresentation.FLOAT):
-#         super(Matrix, self).__init__()
-#         if dtype not in (self.FLOAT, self.DOUBLE):
-#             raise RuntimeError("Matrices of type {} are not supported".format(dtype))
-#         self.dtype = dtype
-#         self.n = n  # columns
-#         self.m = m  # rows
-#         self.scalar = Scalar.of(dtype)
-#
-#     def size(self):
-#         return self.scalar.size() * self.n * self.m
-#
-#     def shape(self):
-#         return self.m, self.n
-#
-#     def alignment(self, layout, order):
-#         # "A row-major matrix of C columns has a base alignment equal to the base alignment of a vector of C matrix
-#         #  components."
-#         if self.order == self.ROW_MAJOR:
-#             return Vector(self.layout, self.n, self.dtype).alignment()
-#
-#         # "A column-major matrix has a base alignment equal to the base alignment of the matrix column type."
-#         if self.order == self.COLUMN_MAJOR:
-#             return self.scalar.alignment()
-#         return -1
-#
-#     def glsl_dtype(self):
-#         return "{}mat{}x{}".format("d" if self.dtype == self.DOUBLE else "", self.n, self.m)
-#
-#     def to_bytes(self, array, layout, order):
-#         if isinstance(array, (list, tuple)):
-#             array = np.array(array, dtype=self.scalar.numpy_dtype())
-#
-#         if array.shape != self.shape():
-#             raise RuntimeError("Array as shape {}, expected {}".format(array.shape, self.shape()))
-#
-#         bytez = bytearray()
-#
-#         if self.order == self.ROW_MAJOR:
-#             row_vector = Vector(self.layout, self.n, self.dtype)
-#
-#             for r in range(self.m):
-#                 bytez += row_vector.to_bytes(array[r, :])
-#
-#         if self.order == self.COLUMN_MAJOR:
-#             for value in array.transpose().flatten():
-#                 bytez += self.scalar.to_bytes(value)
-#
-#         return bytez
-
-
-
 # specs
 # https://www.khronos.org/registry/vulkan/specs/1.1/html/chap14.html#interfaces-resources-layout
 # https://github.com/KhronosGroup/glslang/issues/201#issuecomment-204785552 (example)
@@ -771,5 +829,3 @@ class ByteCache(object):
 #
 # more stuff to come
 # http://www.paranormal-entertainment.com/idr/blog/posts/2014-01-29T17:08:42Z-GLSL_multidimensional_array_madness/
-
-

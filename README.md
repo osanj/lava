@@ -75,3 +75,9 @@ numpy + shaders = <3
   * apparently the padding is not necessary for arrays of structs? (see TestStructIn.test2)
   * ~~almost everything is in place to generically test the bytes implementations exhaustively (just testing tons of combinations for peace of mind)~~
   * iterating over multidimensional arrays is a reoccuring scheme, need to move that in a separete function/class/whatever
+
+* 17.02.2019
+  * I re-read the struct padding thingie and could resolve the bug
+  * when adding a wiki / tutorial later there needs to be a chapter on matrices (numpy style is matrix[row][col], glsl style is matrix[col][row])
+  * allowing to set the order for the matrix is not necessary as lava takes care about the alignment, I will try to force the user to use the default (COLUMN_MAJOR), proper integration would be annoying
+  * lava shaders should set layout and order "globally for a block"
