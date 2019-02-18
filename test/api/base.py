@@ -202,14 +202,7 @@ class GlslBasedTest(unittest.TestCase):
     def build_glsl_assignments_array_scalar(cls, dfn, i, var_name_complete, array_name="array", to_array=True):
         glsl = ""
         dims = dfn.shape()
-        glsl_dtype = None
-
-        if isinstance(dfn.definition, Scalar):
-            glsl_dtype = dfn.definition.glsl_dtype()
-        if isinstance(dfn.definition, Vector):
-            glsl_dtype = dfn.definition.scalar.glsl_dtype()
-        if isinstance(dfn.definition, Matrix):
-            glsl_dtype = dfn.definition.scalar.glsl_dtype()
+        glsl_dtype = dfn.definition.glsl_dtype()
 
         for k, indices in enumerate(itertools.product(*[range(d) for d in dims])):
             var_name_complete_with_indices = ("{}" + "[{}]" * len(dims)).format(var_name_complete, *indices)

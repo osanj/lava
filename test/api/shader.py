@@ -328,7 +328,10 @@ class TestByteCodeInspection(GlslBasedTest):
                 Shared varB2; // expected offset 8
             };
 
-            void main() {}
+            void main() {
+                NonUsed nonUsed;
+                nonUsed.var2[0].x = 1;
+            }
             """
         shader = self.shader_from_txt(glsl, verbose=False)
         shader.inspect()  # just test whether this blows up
