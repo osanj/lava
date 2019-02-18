@@ -175,7 +175,22 @@ class ByteCode(object):
             offset = instruction.op.literals[0]
             offsets[member] = offset
 
-        return [offsets.get(i) for i in range(max(offsets.keys()) + 1)]
+        return offsets
+
+    def find_orders(self, struct_id):
+        orders = {}
+
+        instructions_row_major = self.find_instructions_with_attributes(OpMemberDecorate, type_id=struct_id,
+                                                                        decoration=spirv.Decoration.ROW_MAJOR)
+
+        instructions_col_major = self.find_instructions_with_attributes(OpMemberDecorate, type_id=struct_id,
+                                                                        decoration=spirv.Decoration.COL_MAJOR)
+
+        for instruction in instructions_row_major + instructions_col_major:
+            member = instruction.op.member
+            orders[member] = instruction.op.decoration
+
+        return orders
 
     def find_blocks(self):
         blocks = {}

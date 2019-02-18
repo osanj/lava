@@ -5,7 +5,7 @@ import logging
 import vulkan as vk
 
 from lava.api.bytecode import ByteCode
-from lava.api.bytes import Array, Scalar, Struct, Vector
+from lava.api.bytes import Array, Matrix, Scalar, Struct, Vector
 from lava.api.constants.spirv import Decoration, ExecutionMode, ExecutionModel, Layout, Order, StorageClass
 from lava.api.constants.vk import BufferUsage
 
@@ -83,7 +83,6 @@ class Shader(object):
 
         self.definitions_scalar = {index: Scalar.of(dtype) for index, dtype in self.byte_code.types_scalar.items()}
         self.definitions_vector = {index: Vector(n, dtype) for index, (dtype, n) in self.byte_code.types_vector.items()}
-        self.definitions_matrix = {}
         self.definitions_array = {}
         self.definitions_struct = {}
 
@@ -98,9 +97,15 @@ class Shader(object):
                 if type_index in self.byte_code.types_struct and type_index not in self.definitions_struct:
                     break
 
-                definition = self.definitions_scalar.get(type_index, None)
+                definition = None
+
+                # matrix types are shared, but still affected by the layout, create a instance for every occurrence
+                if type_index in self.byte_code.types_matrix:
+                    dtype, rows, cols = self.byte_code.types_matrix[type_index]
+                    definition = Matrix(cols, rows, dtype, default_layout, default_order)
+
+                definition = definition or self.definitions_scalar.get(type_index, None)
                 definition = definition or self.definitions_vector.get(type_index, None)
-                definition = definition or self.definitions_matrix.get(type_index, None)
                 definition = definition or self.definitions_struct.get(type_index, None)
 
                 self.definitions_array[index] = Array(definition, dims, default_layout)
@@ -129,9 +134,15 @@ class Shader(object):
 
                 definitions = []
                 for member_index in member_indices:
-                    definition = self.definitions_scalar.get(member_index, None)
+                    definition = None
+
+                    # matrix types are shared, but still affected by the layout, create a instance for every occurrence
+                    if member_index in self.byte_code.types_matrix:
+                        dtype, rows, cols = self.byte_code.types_matrix[member_index]
+                        definition = Matrix(cols, rows, dtype, default_layout, default_order)
+
+                    definition = definition or self.definitions_scalar.get(member_index, None)
                     definition = definition or self.definitions_vector.get(member_index, None)
-                    definition = definition or self.definitions_matrix.get(member_index, None)
                     definition = definition or self.definitions_array.get(member_index, None)
                     definition = definition or self.definitions_struct.get(member_index, None)
                     definitions.append(definition)
@@ -150,6 +161,8 @@ class Shader(object):
             definition = self.definitions_struct[index]
 
             offsets_bytecode = self.byte_code.find_offsets(index)
+            # TODO: add checks for offsets_bytecode?
+            offsets_bytecode = [offsets_bytecode.get(i) for i in range(len(definition.definitions))]
 
             self.set_layout(index, Layout.STD140)
             match_std140 = offsets_bytecode == definition.offsets()
@@ -174,14 +187,43 @@ class Shader(object):
                     self.set_layout(index, Layout.STDXXX)
 
             else:
-                raise RuntimeError("Found unexpected memory offsets")
+                possible_reasons = [
+                    "a memory layout other than std140 or std430 was used",
+                    "an offset was defined manually, e.g. for a struct member: layout(offset=128) int member;",
+                    "a matrix memory order was defined manually, e.g. for a struct member: layout(row_major) "
+                    "StructXYZ structWithMatrices;"
+                ]
+                raise RuntimeError("Found unexpected memory offsets, this might occur because of\n" +
+                                   "".join(["* {}\n".format(reason) for reason in possible_reasons]))
 
-    def set_layout(self, index, layout):
+    def set_layout(self, index, layout, order=None):
+        def map_order(_order):
+            if _order is None:
+                raise ValueError("Order is empty")
+            if _order == Decoration.ROW_MAJOR:
+                return Order.ROW_MAJOR
+            if _order == Decoration.COL_MAJOR:
+                return Order.COLUMN_MAJOR
+            raise ValueError("Unknown order '{}'".format(order))
+
         if index in self.definitions_struct:
             member_indices = self.byte_code.types_struct[index]
+            member_orders = self.byte_code.find_orders(index)
 
-            for member_index in member_indices:
-                if member_index in self.byte_code.types_struct or member_index in self.byte_code.types_array:
+            for i, member_index in enumerate(member_indices):
+                if member_index in self.byte_code.types_matrix:
+                    self.definitions_struct[index].definitions[i].layout = layout
+                    self.definitions_struct[index].definitions[i].order = map_order(member_orders[i])
+
+                if member_index in self.byte_code.types_array:
+                    # only structs are decorated, arrays are only decorated as a member of an array
+                    # therefore the order needs to be forwarded in the case of arrays of matrices
+                    if isinstance(self.definitions_array[member_index].definition, Matrix):
+                        self.set_layout(member_index, layout, map_order(member_orders[i]))
+                    else:
+                        self.set_layout(member_index, layout)
+
+                if member_index in self.byte_code.types_struct:
                     self.set_layout(member_index, layout)
 
             self.definitions_struct[index].layout = layout  # set after setting children!
@@ -189,10 +231,14 @@ class Shader(object):
         elif index in self.definitions_array:
             type_index, _ = self.byte_code.types_array[index]
 
+            if type_index in self.byte_code.types_matrix:
+                self.definitions_array[index].definition.layout = layout
+                self.definitions_array[index].definition.order = order
+
             if type_index in self.byte_code.types_struct:
                 self.set_layout(type_index, layout)
 
-            self.definitions_array[index].layout = layout  # set after setting children!s
+            self.definitions_array[index].layout = layout  # set after setting children!
 
         else:
             raise RuntimeError()

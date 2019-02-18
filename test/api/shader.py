@@ -6,7 +6,7 @@ import unittest
 
 import numpy as np
 
-from lava.api.bytes import Array, Vector, Scalar, Struct
+from lava.api.bytes import Array, Matrix, Vector, Scalar, Struct
 from lava.api.constants.spirv import DataType, Layout
 from lava.api.constants.vk import BufferUsage
 
@@ -58,34 +58,43 @@ class TestByteCodeInspection(GlslBasedTest):
                 double var1;
                 double var2;
                 Data1 var3;
+                dmat4 var4;
             };
 
-            layout(std140, binding = 0) uniform uniIn
-            //layout(std430, binding = 0) readonly buffer bufIn
+            struct Data3 {
+                mat3x3[3] var1;
+            };
+
+            //layout(std140, binding = 0, row_major) uniform uniIn
+            layout(std430, binding = 0, row_major) readonly buffer bufIn
             {
                 bool flag2;
                 vec2[5][2][3] abc;
                 float bufferIn[5];
                 //bool flag;
-                //mat4x4 model;
+                layout(column_major) mat3x4 model;
+                dmat3x2[99] modelz;
                 Data1[2] datas1;
                 Data2 datas2;
             };
 
-            //layout(std140, binding = 1) writeonly buffer bufOut
-            layout(std430, binding = 1) writeonly buffer bufOut
+            layout(std140, binding = 1) writeonly buffer bufOut
+            //layout(std430, binding = 1) writeonly buffer bufOut
             {
                 uint width;
                 uint height;
-                Data2 datas3;
+                layout(row_major) Data2 datas3;
                 float bufferOut[4];
                 uint asd;
+                dmat3x2[99] modelz2;
             };
 
             void main() {
                 uint index = gl_GlobalInvocationID.x;
                 //bufferOut[index] = bufferIn[index] + 1;
 
+                Data3 something;
+                something.var1[0][0].x = 1;
             }
             """
 
@@ -117,7 +126,7 @@ class TestByteCodeInspection(GlslBasedTest):
             struct_name, member_names = shader.byte_code.find_names(idx)
             offsets = shader.byte_code.find_offsets(idx)
             names.append("  {}) {} {{ {} }}".format(idx, struct_name, ", ".join(
-                ["{}({})".format(*x) for x in zip(member_names, offsets)])))
+                ["{}({})".format(mname, offsets.get(i)) for i, mname in enumerate(member_names)])))
         print "\n".join(names)
         print ""
         print "blocks"
@@ -131,11 +140,15 @@ class TestByteCodeInspection(GlslBasedTest):
         simple += [Vector(n, dtype) for n, dtype in itertools.product(range(2, 5), DataType.ALL)]
 
         for layout, _ in itertools.product([Layout.STD140, Layout.STD430], range(5)):
-            struct = Struct(rng.choice(simple, size=3, replace=False), layout, type_name="SomeStruct")
+            matrices = [Matrix(n, m, dtype, layout) for n, m, dtype in
+                        itertools.product(range(2, 5), range(2, 5), [DataType.FLOAT, DataType.DOUBLE])]
+            simple_and_matrices = simple + matrices
+
+            struct = Struct(rng.choice(simple_and_matrices, size=3, replace=False), layout, type_name="SomeStruct")
             structs = [struct]
 
             for _ in range(4):
-                members = [structs[-1]] + rng.choice(simple, size=2, replace=False).tolist()
+                members = [structs[-1]] + rng.choice(simple_and_matrices, size=2, replace=False).tolist()
                 structs.append(Struct(rng.permutation(members), layout, type_name="SomeStruct{}".format(len(structs))))
 
             container = structs[-1]
@@ -155,6 +168,21 @@ class TestByteCodeInspection(GlslBasedTest):
 
         for definition, layout, _ in itertools.product(variables, [Layout.STD140, Layout.STD430], range(3)):
             container = Struct([Array(definition, Random.shape(rng, 3, 5), layout)], layout)
+
+            glsl = self.build_glsl_program(((container, 0, BufferUsage.STORAGE_BUFFER),))
+            shader = self.shader_from_txt(glsl, verbose=False)
+            shader.inspect()
+
+            definition, _ = shader.get_block(0)
+            self.assertTrue(container.compare(definition, quiet=True))
+
+    def test_detection_type_arrays_of_matrices(self):
+        rng = np.random.RandomState(321)
+        matrix_attributes = itertools.product(range(2, 5), range(2, 5), [DataType.FLOAT, DataType.DOUBLE])
+
+        for (n, m, dtype), layout, _ in itertools.product(matrix_attributes, [Layout.STD140, Layout.STD430], range(3)):
+            matrix = Matrix(n, m, dtype, layout)
+            container = Struct([Array(matrix, Random.shape(rng, 3, 5), layout)], layout)
 
             glsl = self.build_glsl_program(((container, 0, BufferUsage.STORAGE_BUFFER),))
             shader = self.shader_from_txt(glsl, verbose=False)
@@ -274,6 +302,36 @@ class TestByteCodeInspection(GlslBasedTest):
         self.assertFalse(container_std140.compare(definition1, quiet=True))
         self.assertFalse(container_std430.compare(definition0, quiet=True))
         self.assertTrue(container_std430.compare(definition1, quiet=True))
+
+    def test_struct_unused(self):
+        glsl = """
+            #version 450
+            #extension GL_ARB_separate_shader_objects : enable
+
+            struct NonUsed {
+                uint var1;
+                dmat4x3 var2;
+            };
+
+            struct Shared {
+                int var1;
+                double var2;
+            };
+
+            layout(std140, binding = 0) buffer BufferA {
+                uvec2 varA1;
+                Shared varA2; // expected offset 16
+            };
+
+            layout(std430, binding = 1) buffer BufferB {
+                uvec2 varB1;
+                Shared varB2; // expected offset 8
+            };
+
+            void main() {}
+            """
+        shader = self.shader_from_txt(glsl, verbose=False)
+        shader.inspect()  # just test whether this blows up
 
 
 if __name__ == "__main__":

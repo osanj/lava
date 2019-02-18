@@ -360,9 +360,17 @@ class Matrix(ByteRepresentation):
         self.cols = cols
         self.rows = rows
         self.order = order
-        self.vector = Vector(rows if order == Order.COLUMN_MAJOR else cols, dtype)
-        self.vector_count = cols if order == Order.COLUMN_MAJOR else rows
         self.layout = layout
+
+    @property
+    def order(self):
+        return self._order
+
+    @order.setter
+    def order(self, order):
+        self._order = order
+        self.vector = Vector(self.rows if order == Order.COLUMN_MAJOR else self.cols, self.dtype)
+        self.vector_count = self.cols if order == Order.COLUMN_MAJOR else self.rows
 
     @property
     def layout(self):
