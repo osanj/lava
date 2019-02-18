@@ -212,12 +212,16 @@ class TestCpuToShader(GlslBasedTest):
         simple = [Scalar.uint(), Scalar.int(), Scalar.float(), Scalar.double()]
         simple += [Vector(n, dtype) for n, dtype in itertools.product(range(2, 5), DataType.ALL)]
 
-        for layout, _ in itertools.product([Layout.STD140, Layout.STD430], range(5)):
-            struct = Struct(rng.choice(simple, size=3, replace=False), layout, type_name="SomeStruct")
+        for layout, _ in itertools.product([Layout.STD140, Layout.STD430], range(10)):
+            matrices = [Matrix(n, m, dtype, layout) for n, m, dtype in
+                        itertools.product(range(2, 5), range(2, 5), [DataType.FLOAT, DataType.DOUBLE])]
+            simple_and_matrices = simple + matrices
+
+            struct = Struct(rng.choice(simple_and_matrices, size=4, replace=False), layout, type_name="SomeStruct")
             structs = [struct]
 
             for _ in range(4):
-                members = [structs[-1]] + rng.choice(simple, size=2, replace=False).tolist()
+                members = [structs[-1]] + rng.choice(simple_and_matrices, size=3, replace=False).tolist()
                 structs.append(Struct(rng.permutation(members), layout, type_name="SomeStruct{}".format(len(structs))))
 
             container = structs[-1]
@@ -233,13 +237,17 @@ class TestCpuToShader(GlslBasedTest):
         simple = [Scalar.uint(), Scalar.int(), Scalar.float(), Scalar.double()]
         simple += [Vector(n, dtype) for n, dtype in itertools.product(range(2, 5), DataType.ALL)]
 
-        for layout, _ in itertools.product([Layout.STD140, Layout.STD430], range(5)):
-            struct = Struct(rng.choice(simple, size=3, replace=False), layout, type_name="SomeStruct")
+        for layout, _ in itertools.product([Layout.STD140, Layout.STD430], range(10)):
+            matrices = [Matrix(n, m, dtype, layout) for n, m, dtype in
+                        itertools.product(range(2, 5), range(2, 5), [DataType.FLOAT, DataType.DOUBLE])]
+            simple_and_matrices = simple + matrices
+
+            struct = Struct(rng.choice(simple_and_matrices, size=4, replace=False), layout, type_name="SomeStruct")
             structs = [struct]
             arrays = [Array(struct, Random.shape(rng, 2, 3), layout)]
 
             for _ in range(2):
-                members = [arrays[-1]] + rng.choice(simple, size=2, replace=False).tolist()
+                members = [arrays[-1]] + rng.choice(simple_and_matrices, size=3, replace=False).tolist()
                 structs.append(Struct(rng.permutation(members), layout, type_name="SomeStruct{}".format(len(structs))))
                 arrays.append(Array(structs[-1], Random.shape(rng, 2, 3), layout))
 
@@ -263,7 +271,7 @@ class TestCpuToShader(GlslBasedTest):
             Vector.vec2(),
             Array(Scalar.float(), 2, layout),
             Vector.vec2(),
-            # Array(mat3, 2, layout)
+            Array(Matrix(3, 3, DataType.FLOAT, layout), 2, layout)
         ], layout, type_name="structB")
 
         container = Struct([
@@ -273,7 +281,7 @@ class TestCpuToShader(GlslBasedTest):
             struct_a,
             Scalar.float(),
             Array(Scalar.float(), 2, layout),
-            # mat2x3
+            Matrix(2, 3, DataType.FLOAT, layout),
             Array(struct_b, 2, layout)
         ], layout)
 

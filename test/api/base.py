@@ -273,6 +273,15 @@ class GlslBasedTest(unittest.TestCase):
                         count += 1
                     values_mapped[d] = data
 
+                elif isinstance(d.definition, Matrix):
+                    shape = list(d.shape()) + list(d.definition.shape())
+                    data = np.zeros(shape, dtype=d.definition.vector.scalar.numpy_dtype())
+                    for indices in itertools.product(*[range(s) for s in shape]):
+                        data[indices] = count
+                        values_raw.append(count)
+                        count += 1
+                    values_mapped[d] = data
+
                 else:
                     data = np.zeros(d.shape()).tolist()
                     for indices in itertools.product(*[range(s) for s in d.shape()]):

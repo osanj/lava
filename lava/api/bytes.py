@@ -503,8 +503,7 @@ class Array(ByteRepresentation):
             return False
 
         return self.definition.compare(other.definition,
-                                       list(path) + ["array {}".format("x".join(map(str, self.shape())))],
-                                       quiet)
+                                       list(path) + ["array {}".format("x".join(map(str, self.shape())))], quiet)
 
     def to_bytes(self, values):
         if isinstance(self.definition, Scalar):
@@ -513,8 +512,8 @@ class Array(ByteRepresentation):
         elif isinstance(self.definition, Vector):
             return self.to_bytes_for_vectors(values)
 
-        # elif isinstance(self.definition, Matrix):
-        #     return self.to_bytes_for_matrices(values)
+        elif isinstance(self.definition, Matrix):
+            return self.to_bytes_for_matrices(values)
 
         else:
             bytez = bytearray()
@@ -572,6 +571,31 @@ class Array(ByteRepresentation):
 
         return array_padded.tobytes()
 
+    def to_bytes_for_matrices(self, array):
+        numpy_dtype = self.definition.vector.scalar.numpy_dtype()
+        shape = tuple(list(self.shape()) + list(self.definition.shape()))
+
+        if not isinstance(array, np.ndarray):
+            raise RuntimeError("Incorrect datatype {}, expected {}".format(type(array), np.ndarray))
+        if array.dtype != numpy_dtype:
+            raise RuntimeError("Incorrect datatype {}, expected {}".format(array.dtype, numpy_dtype))
+        if tuple(array.shape) != shape:
+            raise RuntimeError("Array has shape {}, expected {}".format(array.shape, shape))
+
+        # swap the last two dimensions if necessary
+        if self.definition.order == Order.COLUMN_MAJOR:
+            array = np.swapaxes(array, -2, -1)
+            shape = array.shape
+
+        p = (self.a - self.definition.vector.size()) / self.definition.vector.scalar.size()
+        a = self.a / self.definition.vector.scalar.size()
+
+        array_padded = np.zeros(a * np.product(shape[:-1]), dtype=array.dtype)
+        mask = (np.arange(len(array_padded)) % a) < (a - p)
+        array_padded[mask] = array.flatten()
+
+        return array_padded.tobytes()
+
     def from_bytes(self, bytez):
         if isinstance(self.definition, Scalar):
             return self.from_bytes_for_scalars(bytez)
@@ -579,8 +603,8 @@ class Array(ByteRepresentation):
         elif isinstance(self.definition, Vector):
             return self.from_bytes_for_vectors(bytez)
 
-        # elif isinstance(self.definition, Matrix):
-        #     return self.to_bytes_for_matrices(values)
+        elif isinstance(self.definition, Matrix):
+            return self.from_bytes_for_matrices(bytez)
 
         else:
             values = np.zeros(self.shape()).tolist()
@@ -615,6 +639,23 @@ class Array(ByteRepresentation):
         array_padded = np.frombuffer(bytez, dtype=self.definition.scalar.numpy_dtype())
         mask = (np.arange(a * np.product(shape[:-1])) % a) < (a - p)
         return array_padded[mask].reshape(shape)
+
+    def from_bytes_for_matrices(self, bytez):
+        shape = tuple(list(self.shape()) + list(self.definition.shape()))
+        p = (self.a - self.definition.vector.size()) / self.definition.vector.scalar.size()
+        a = self.a / self.definition.vector.scalar.size()
+
+        if self.definition.order == Order.COLUMN_MAJOR:
+            shape = tuple(list(shape[:-2]) + [shape[-1], shape[-2]])
+
+        array_padded = np.frombuffer(bytez, dtype=self.definition.vector.scalar.numpy_dtype())
+        mask = (np.arange(a * np.product(shape[:-1])) % a) < (a - p)
+        array = array_padded[mask].reshape(shape)
+
+        if self.definition.order == Order.COLUMN_MAJOR:
+            array = np.swapaxes(array, -2, -1)
+
+        return array
 
 
 class Struct(ByteRepresentation):
