@@ -37,13 +37,19 @@ class Session(object):
         logger.info("Using {} for session".format(physical_device.get_name()))
         return cls(instance, physical_device, queue_index)
 
-    def allocate_buffer(self, size):
-        memory = self.device.allocate([MemoryType.HOST_VISIBLE, MemoryType.HOST_COHERENT], size)
+    def allocate_buffer(self, buffer):
         pass
 
-    def allocate_gpu_buffer(self, size):
-        memory = self.device.allocate([MemoryType.DEVICE_LOCAL], size)
+    def allocate_push_constants(self, push_constants):
         pass
-
-    def allocate_uniform_buffer(self):
-        pass
+    #
+    # def allocate_buffer(self, size):
+    #     memory = self.device.allocate([MemoryType.HOST_VISIBLE, MemoryType.HOST_COHERENT], size)
+    #     pass
+    #
+    # def allocate_gpu_buffer(self, size):
+    #     memory = self.device.allocate([MemoryType.DEVICE_LOCAL], size)
+    #     pass
+    #
+    # def allocate_uniform_buffer(self):
+    #     pass

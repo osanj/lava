@@ -12,15 +12,15 @@ numpy + shaders = <3
   - [x] vectors
     - [x] to shader
     - [x] from shader
-  - [ ] matrices
-    - [ ] to shader
-    - [ ] from shader
-  - [x] structures
-    - [ ] to shader
-    - [ ] from shader
-  - [ ] multi-dimensional arrays
+  - [x] matrices
     - [x] to shader
-    - [ ] from shader
+    - [x] from shader
+  - [x] structures
+    - [x] to shader
+    - [x] from shader
+  - [x] multi-dimensional arrays
+    - [x] to shader
+    - [x] from shader
   - [ ] dynamic length
 - [ ] ~~images / samplers~~ (not for now)
 - [ ] push constants

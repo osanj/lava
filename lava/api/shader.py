@@ -273,3 +273,9 @@ class Shader(object):
     def get_block(self, binding):
         index, usage = self.get_block_index(binding)
         return self.definitions_struct[index], usage
+
+    def get_block_definition(self, binding):
+        return self.get_block(binding)[0]
+
+    def get_block_usage(self, binding):
+        return self.get_block(binding)[1]
