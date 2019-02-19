@@ -19,16 +19,24 @@ class Pipeline(object):
         self.descriptor_pool_handle = None
         bindings = []
 
+        print " 1"
+
         for i, memory_obj in enumerate(memory_objects):
             bindings.append(memory_obj.descriptor_set_layout(i))
+
+        print " 2"
 
         descriptor_layout_create_info = vk.VkDescriptorSetLayoutCreateInfo(flags=None, pBindings=bindings)
         self.descriptor_set_layout_handle = vk.vkCreateDescriptorSetLayout(self.device.handle,
                                                                            descriptor_layout_create_info, None)
 
+        print " 3"
+
         shader_stage_create_info = vk.VkPipelineShaderStageCreateInfo(stage=vk.VK_SHADER_STAGE_COMPUTE_BIT,
                                                                       module=shader.handle,
                                                                       pName=shader.get_entry_point())
+
+        print " 4"
 
         if len(push_constants) > 0:
             if len(push_constants) > 1:
@@ -43,12 +51,17 @@ class Pipeline(object):
         else:
             pipeline_layout_create_info = vk.VkPipelineLayoutCreateInfo(pSetLayouts=[self.descriptor_set_layout_handle])
 
+        print " 5"
+
         self.pipeline_layout_handle = vk.vkCreatePipelineLayout(self.device.handle, pipeline_layout_create_info, None)
         pipeline_create_info = vk.VkComputePipelineCreateInfo(flags=vk.VK_SHADER_STAGE_COMPUTE_BIT,
                                                               stage=shader_stage_create_info,
                                                               layout=self.pipeline_layout_handle)
 
+        print " 6"
         self.handle = vk.vkCreateComputePipelines(self.device.handle, None, 1, [pipeline_create_info], None)
+
+        print " 7"
 
     def __del__(self):
         if self.descriptor_pool_handle is not None:

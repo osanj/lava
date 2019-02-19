@@ -843,23 +843,26 @@ class ByteCache(object):
         s += str(self.definition)
         return s
 
-    def __getitem__(self, key):
+    def __definition_from_key(self, key):
         if isinstance(key, int):
-            return self.values[self.definition.definitions[key]]
+            return self.definition.definitions[key]
 
         if isinstance(key, str):
             if key not in self.definition.member_names:
-                pass
+                raise ValueError("Did not find {} in member names".format(key))
             index = self.definition.member_names.index(key)
-            return self.values[self.definition.definitions[index]]
+            return self.definition.definitions[index]
 
         if isinstance(key, ByteRepresentation):
-            return self.values[key]
+            return key
 
-        raise RuntimeError("Invalid key")
+        raise ValueError("Invalid key")
+
+    def __getitem__(self, key):
+        return self.values[self.__definition_from_key(key)]
 
     def __setitem__(self, key, value):
-        pass
+        self.values[self.__definition_from_key(key)] = value
 
 
 # specs

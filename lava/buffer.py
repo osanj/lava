@@ -3,6 +3,7 @@
 import logging
 
 from lava.api.bytes import ByteCache, Struct
+from lava.api.constants.vk import BufferUsage, MemoryType
 from lava.api.memory import Buffer as _Buffer
 from lava.api.shader import Shader
 
@@ -12,25 +13,31 @@ class Buffer(object):
     LOCATION_CPU = "CPU"
     LOCATION_GPU = "GPU"
 
-    TYPE_STORAGE = "STORAGE"
-    TYPE_UNIFORM = "UNIFORM"
+    USAGE_STORAGE = BufferUsage.STORAGE_BUFFER
+    USAGE_UNIFORM = BufferUsage.UNIFORM_BUFFER
 
-    def __init__(self, block_definition, buffer_type, location):
+    def __init__(self, session, block_definition, block_usage, location):
         if not isinstance(block_definition, Struct):
             raise RuntimeError("Block definitions must be structs")
         self.definition = block_definition
-        self.buffer_type = buffer_type
+        self.block_usage = block_usage
         self.location = location
         self.cache = ByteCache(self.definition)
 
-        self.session = None
+        self.session = session
         self.vulkan_buffer = None
+        self.vulkan_memory = None
+        self.session.register_buffer(self)
+
+    def __del__(self):
+        del self.vulkan_memory
+        del self.vulkan_buffer
 
     @classmethod
-    def from_shader(cls, shader, binding, location):
+    def from_shader(cls, session, shader, binding, location):
         block_definition = shader.get_block_definition(binding)
-        block_type = shader.get_block_buffer_type(binding)
-        return cls(block_definition, block_type, location)
+        block_usage = shader.get_block_usage(binding)
+        return cls(session, block_definition, block_usage, location)
 
     def __getitem__(self, key):
         return self.cache[key]
@@ -41,21 +48,24 @@ class Buffer(object):
     def size(self):
         return self.definition.size()
 
-    def __bind_to_session(self, session, vulkan_buffer):
-        if self.session is not None:
-            raise RuntimeError("Session should only be bound once")
-        self.session = session
-        self.vulkan_buffer = vulkan_buffer
+    def allocate(self):
+        if self.vulkan_buffer is not None:
+            raise RuntimeError("Buffer is already allocated")
 
-    def __bind_to_shader(self, shader):
-        pass
+        self.vulkan_buffer = _Buffer(self.session.device, self.size(), self.block_usage, self.session.queue_index)
 
-    def __write(self):
+        minimum_size = self.vulkan_buffer.get_memory_requirements()[0]
+        memory_types = {self.LOCATION_CPU: MemoryType.CPU, self.LOCATION_GPU: MemoryType.GPU}[self.location]
+
+        self.vulkan_memory = self.session.device.allocate_memory(memory_types, minimum_size)
+        self.vulkan_buffer.bind_memory(self.vulkan_memory)
+
+    def write(self):
         data = self.cache.get_as_dict()
         bytez = self.definition.to_bytes(data)
         self.vulkan_buffer.map(bytez)
 
-    def __read(self):
+    def read(self):
         with self.vulkan_buffer.mapped() as bytebuffer:
             bytez = bytebuffer[:]
 

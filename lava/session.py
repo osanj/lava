@@ -15,6 +15,7 @@ class Session(object):
         self.instance = instance
         self.queue_index = queue_index
         self.device = Device(physical_device, [(QueueType.COMPUTE, self.queue_index)])
+        self.buffers = []
 
     def __del__(self):
         del self.device
@@ -37,11 +38,10 @@ class Session(object):
         logger.info("Using {} for session".format(physical_device.get_name()))
         return cls(instance, physical_device, queue_index)
 
-    def allocate_buffer(self, buffer):
-        pass
+    def register_buffer(self, buffer):
+        if buffer not in self.buffers:
+            self.buffers.append(buffer)
 
-    def allocate_push_constants(self, push_constants):
-        pass
     #
     # def allocate_buffer(self, size):
     #     memory = self.device.allocate([MemoryType.HOST_VISIBLE, MemoryType.HOST_COHERENT], size)
