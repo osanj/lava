@@ -81,3 +81,8 @@ numpy + shaders = <3
   * when adding a wiki / tutorial later there needs to be a chapter on matrices (numpy style is matrix[row][col], glsl style is matrix[col][row])
   * allowing to set the order for the matrix is not necessary as lava takes care about the alignment, I will try to force the user to use the default (COLUMN_MAJOR), proper integration would be annoying
   * lava shaders should set layout and order "globally for a block"
+
+* 20.02.2019
+  * my 1080 would take forever at vkCreateComputePipelines for shaders with large arrays (?)
+  * only related stuff I could find was https://www.gamedev.net/forums/topic/686518-extreme-long-compile-times-and-bad-performance-on-nvidia/
+  * I updated to nvidia's 415 driver (previously had 390) and now it works, phew

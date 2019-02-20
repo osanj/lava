@@ -836,7 +836,23 @@ class ByteCache(object):
         return data
 
     def set_from_dict(self, values):
-        pass
+        for d in self.definition.definitions:
+            if isinstance(d, Struct):
+                self.values[d].set_from_dict(values[d])
+
+            elif isinstance(d, Array) and isinstance(d.definition, Struct):
+                for indices in itertools.product(*[range(s) for s in d.shape()]):
+                    _value = values
+                    _cache = self.values[d]
+
+                    for index in indices:
+                        _value = _value[index]
+                        _cache = _cache[index]
+
+                    _cache.set_from_dict(_value)
+
+            else:
+                self.values[d] = values[d]
 
     def __str__(self):
         s = self.__class__.__name__ + " around\n"

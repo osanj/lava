@@ -21,12 +21,12 @@ class SessionTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        logging.basicConfig(level=logging.DEBUG)
+        logging.basicConfig()
         TestUtil.set_vulkan_environment_variables()
 
     def setUp(self):
         super(SessionTest, self).setUp()
-        self.session = Session.discover()
+        self.session = Session.discover(validation_lvl=logging.INFO)
 
     def tearDown(self):
         super(SessionTest, self).tearDown()
@@ -41,6 +41,13 @@ class SessionTest(unittest.TestCase):
             os.remove(shader_path_spirv)
         return shader
 
+    def test_limits(self):
+        import vulkan as vk
+
+        properties = vk.vkGetPhysicalDeviceProperties(self.session.device.physical_device.handle)
+        for x in dir(properties.limits):
+            print x, getattr(properties.limits, x)
+
     def test_convolution(self):
         glsl = """
             #version 450
@@ -49,6 +56,8 @@ class SessionTest(unittest.TestCase):
             layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
 
             layout(std430, binding = 0) buffer BufferA {
+                //float[30][30][3] imageIn;
+                //float[300][300][3] imageIn;
                 float[720][1280][3] imageIn;
             };
 
@@ -58,6 +67,8 @@ class SessionTest(unittest.TestCase):
             
             
             layout(std430, binding = 2) buffer BufferC {
+                //float[30][30][3] imageOut;
+                //float[300][300][3] imageOut;
                 float[720][1280][3] imageOut;
             };
             
@@ -88,12 +99,12 @@ class SessionTest(unittest.TestCase):
                 int w = int(pixel.y);
                 int c = int(pixel.z);
                 
-                if (inputHasPixel(h, w, c)) {
+                if (!inputHasPixel(h, w, c)) {
                     return;
                 }
                 
                 imageOut[h][w][c] = 0;
-                 
+
                 for (int i = 0; i < filterHeight; i++) {
                     for (int j = 0; j < filterWidth; j++) {
                         float a = inputPixel(h - fdh + i, w - fdw + j, c, 0.0);
@@ -104,7 +115,7 @@ class SessionTest(unittest.TestCase):
             }
             """
 
-        shader = self.shader_from_txt(glsl)
+        shader = self.shader_from_txt(glsl, clean_up=False)
 
         buffer_im_in = Buffer.from_shader(self.session, shader, binding=0, location=Buffer.LOCATION_CPU)
         buffer_weights_in = Buffer.from_shader(self.session, shader, binding=1, location=Buffer.LOCATION_CPU)
@@ -124,23 +135,17 @@ class SessionTest(unittest.TestCase):
         import cv2 as cv
 
         im = cv.imread("image.jpg", cv.IMREAD_COLOR)
-        # im = None
 
         buffer_im_in["imageIn"] = im.astype(np.float32)
-        buffer_weights_in["convWeights"] = np.ones((5, 5), dtype=np.float32) / 5 * 5
+        buffer_weights_in["convWeights"] = np.ones((5, 5), dtype=np.float32) / (5 * 5)
 
         buffer_im_in.write()
-        print "1"
         buffer_weights_in.write()
-        print "2"
 
         pipeline = Pipeline(self.session.device, shader.vulkan_shader, [buffer_im_in.vulkan_buffer, buffer_weights_in.vulkan_buffer, buffer_im_out.vulkan_buffer])
-        print "3"
         executor = Executor(self.session.device, pipeline, self.session.queue_index)
-        print "4"
 
-        executor.record(720, 1280, 3)
-        print "5"
+        executor.record(*im.shape)
         executor.execute_and_wait()
 
         buffer_im_out.read()
@@ -150,10 +155,4 @@ class SessionTest(unittest.TestCase):
         cv.imshow("input", im)
         cv.imshow("output", np.around(im_filtered).astype(np.uint8))
         cv.waitKey()
-
-
-
-
-
-
-
+        cv.destroyAllWindows()
