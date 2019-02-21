@@ -390,9 +390,15 @@ class Matrix(ByteRepresentation):
                 self.a += (16 - self.a % 16) % 16
 
     def size(self):
+        return self.step_size() * self.vector_count
+
+    def stride(self):
+        return self.step_size()
+
+    def step_size(self):
         s = self.vector.size()
         s += (self.a - s % self.a) % self.a  # pad to array stride
-        return s * self.vector_count
+        return s
 
     def shape(self):
         return self.rows, self.cols
@@ -486,9 +492,21 @@ class Array(ByteRepresentation):
         return self.dims
 
     def size(self):
+        return self.step_size() * np.product(self.shape())
+
+    def strides(self):
+        strides = [self.step_size()]
+        shape = self.shape()
+
+        for i in reversed(range(1, len(shape))):
+            strides.insert(0, shape[i] * strides[0])
+
+        return strides
+
+    def step_size(self):
         s = self.definition.size()
         s += (self.a - s % self.a) % self.a  # pad to array stride
-        return s * np.product(self.shape())
+        return s
 
     def alignment(self):
         return self.a

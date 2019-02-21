@@ -66,7 +66,7 @@ class GlslBasedTest(unittest.TestCase):
 
     @classmethod
     def run_program(cls, glsl, bytez_input, bytez_output_size, usage_input=BufferUsage.STORAGE_BUFFER,
-                    usage_output=BufferUsage.STORAGE_BUFFER, verbose=True):
+                    usage_output=BufferUsage.STORAGE_BUFFER, verbose=True, groups=(1, 1, 1)):
         session = cls.SESSION
         shader = cls.shader_from_txt(glsl, verbose)
 
@@ -78,7 +78,7 @@ class GlslBasedTest(unittest.TestCase):
         pipeline = Pipeline(session.device, shader, [buffer_in, buffer_out])
         executor = Executor(session.device, pipeline, session.queue_index)
 
-        executor.record(1, 1, 1)
+        executor.record(*groups)
         executor.execute_and_wait()
 
         with buffer_out.mapped() as bytebuffer:

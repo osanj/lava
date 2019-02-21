@@ -166,6 +166,13 @@ class ByteCode(object):
         member_names = {instruction.op.member: instruction.op.name for instruction in instructions}
         return struct_name, [member_names.get(i) for i in range(max(member_names.keys()) + 1)]
 
+    def find_member_ids(self, struct_id):
+        instructions = self.find_instructions_with_attributes(OpTypeStruct, result_id=struct_id)
+        if len(instructions) == 1:
+            return instructions[0].op.member_types
+        else:
+            return None
+
     def find_offsets(self, struct_id):
         offsets = {}
 
@@ -176,6 +183,32 @@ class ByteCode(object):
             offsets[member] = offset
 
         return offsets
+
+    def find_strides(self, array_id):
+        array_ids = [array_id]
+
+        instructions = self.find_instructions_with_attributes(OpTypeArray, result_id=array_ids[-1])
+        while len(instructions) == 1:
+            array_ids.append(instructions[0].op.element_type)
+            instructions = self.find_instructions_with_attributes(OpTypeArray, result_id=array_ids[-1])
+
+        strides = []
+
+        for array_id in array_ids:
+            instructions = self.find_instructions_with_attributes(OpDecorate, decoration=spirv.Decoration.ARRAY_STRIDE,
+                                                                  target_id=array_id)
+            if len(instructions) == 1:
+                strides.append(instructions[0].op.literals[0])
+
+        return strides
+
+    def find_matrix_stride(self, struct_id, member):
+        instructions = self.find_instructions_with_attributes(OpMemberDecorate, type_id=struct_id, member=member,
+                                                              decoration=spirv.Decoration.MATRIX_STRIDE)
+        if len(instructions) == 1:
+            return instructions[0].op.literals[0]
+        else:
+            return None
 
     def find_orders(self, struct_id):
         orders = {}

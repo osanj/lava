@@ -75,7 +75,8 @@ class Shader(object):
 
     def inspect(self):
         self.inspect_definitons()
-        self.inspect_layouts()
+        for binding in self.get_bindings():
+            self.inspect_layouts(binding)
 
     def inspect_definitons(self):
         default_layout = Layout.STD140
@@ -153,48 +154,62 @@ class Shader(object):
 
                 candidates_struct.remove(index)
 
-    def inspect_layouts(self):
-        bindings = self.get_bindings()
+    def inspect_layouts(self, binding):
+        index, usage = self.get_block_index(binding)
 
-        for binding in bindings:
-            index, usage = self.get_block_index(binding)
-            definition = self.definitions_struct[index]
+        self.set_layout(index, Layout.STD140)
+        match_std140 = self.check_layout(index)
 
-            offsets_bytecode = self.byte_code.find_offsets(index)
-            # TODO: add checks for offsets_bytecode?
-            offsets_bytecode = [offsets_bytecode.get(i) for i in range(len(definition.definitions))]
+        self.set_layout(index, Layout.STD430)
+        match_std430 = self.check_layout(index)
 
+        # deduce layout
+        if match_std140 and not match_std430:
             self.set_layout(index, Layout.STD140)
-            match_std140 = offsets_bytecode == definition.offsets()
 
+        elif not match_std140 and match_std430:
             self.set_layout(index, Layout.STD430)
-            match_std430 = offsets_bytecode == definition.offsets()
 
-            # deduce layout
-            if match_std140 and not match_std430:
+        elif match_std140 and match_std430:
+            # std430 is not allowed for uniform buffer objects
+            if usage == BufferUsage.UNIFORM_BUFFER:
                 self.set_layout(index, Layout.STD140)
-
-            elif not match_std140 and match_std430:
-                self.set_layout(index, Layout.STD430)
-
-            elif match_std140 and match_std430:
-                _, usage = self.get_block_index(binding)
-
-                # std430 is not allowed for uniform buffer objects
-                if usage == BufferUsage.UNIFORM_BUFFER:
-                    self.set_layout(index, Layout.STD140)
-                else:
-                    self.set_layout(index, Layout.STDXXX)
-
             else:
-                possible_reasons = [
-                    "a memory layout other than std140 or std430 was used",
-                    "an offset was defined manually, e.g. for a struct member: layout(offset=128) int member;",
-                    "a matrix memory order was defined manually, e.g. for a struct member: layout(row_major) "
-                    "StructXYZ structWithMatrices;"
-                ]
-                raise RuntimeError("Found unexpected memory offsets, this might occur because of\n" +
-                                   "".join(["* {}\n".format(reason) for reason in possible_reasons]))
+                self.set_layout(index, Layout.STDXXX)
+
+        else:
+            possible_reasons = [
+                "a memory layout other than std140 or std430 was used",
+                "an offset was defined manually, e.g. for a struct member: layout(offset=128) int member;",
+                "a matrix memory order was defined manually, e.g. for a struct member: layout(row_major) "
+                "StructXYZ structWithMatrices;"
+            ]
+            raise RuntimeError("Found unexpected memory offsets, this might occur because of\n" +
+                               "".join(["* {}\n".format(reason) for reason in possible_reasons]))
+
+    def check_layout(self, index):
+        definition = self.definitions_struct[index]
+
+        member_indices = self.byte_code.find_member_ids(index)
+        offsets_bytecode = self.byte_code.find_offsets(index)
+        offsets_bytecode = [offsets_bytecode.get(i) for i in range(len(definition.definitions))]
+
+        if None in offsets_bytecode:
+            raise RuntimeError("Unexpected error in bytecode inspection")
+
+        if offsets_bytecode != definition.offsets():
+            return False
+
+        for i, (member_index, d) in enumerate(zip(member_indices, definition.definitions)):
+            if isinstance(d, Array):
+                if self.byte_code.find_strides(member_index) != d.strides():
+                    return False
+
+            if isinstance(d, Matrix):
+                if self.byte_code.find_matrix_stride(index, i) != d.stride():
+                    return False
+
+        return True
 
     def set_layout(self, index, layout, order=None):
         def map_order(_order):

@@ -173,8 +173,12 @@ class TestByteCodeInspection(GlslBasedTest):
             shader = self.shader_from_txt(glsl, verbose=False)
             shader.inspect()
 
-            definition, _ = shader.get_block(0)
-            self.assertTrue(container.compare(definition, quiet=True))
+            detected_definition, _ = shader.get_block(0)
+            self.assertTrue(container.compare(detected_definition, quiet=True))
+
+            if isinstance(definition, Vector):
+                if definition.length() < 3 and definition.dtype != DataType.DOUBLE:
+                    self.assertEqual(detected_definition.layout, layout)
 
     def test_detection_type_arrays_of_matrices(self):
         rng = np.random.RandomState(321)
@@ -188,8 +192,8 @@ class TestByteCodeInspection(GlslBasedTest):
             shader = self.shader_from_txt(glsl, verbose=False)
             shader.inspect()
 
-            definition, _ = shader.get_block(0)
-            self.assertTrue(container.compare(definition, quiet=True))
+            detected_definition, _ = shader.get_block(0)
+            self.assertTrue(container.compare(detected_definition, quiet=True))
 
     def test_detection_layout_stdxxx_ssbo(self):
         variables = [Scalar.uint(), Scalar.int(), Scalar.float(), Scalar.double()]
