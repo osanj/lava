@@ -9,7 +9,7 @@ import unittest
 import numpy as np
 
 from lava.api.bytes import Array, Matrix, Vector, Scalar, Struct
-from lava.api.constants.spirv import Layout, Order
+from lava.api.constants.spirv import DataType, Layout, Order
 from lava.api.constants.vk import BufferUsage, MemoryType
 from lava.api.memory import Buffer
 from lava.api.pipeline import Executor, Pipeline
@@ -26,6 +26,9 @@ class GlslBasedTest(unittest.TestCase):
 
     SESSION = None
     MEMORY = None
+
+    LAYOUTS = [Layout.STD140, Layout.STD430]
+    LAYOUT_MAP = {Layout.STD140: "std140", Layout.STD430: "std430"}
 
     @classmethod
     def setUpClass(cls):
@@ -66,9 +69,14 @@ class GlslBasedTest(unittest.TestCase):
 
     @classmethod
     def run_program(cls, glsl, bytez_input, bytez_output_size, usage_input=BufferUsage.STORAGE_BUFFER,
-                    usage_output=BufferUsage.STORAGE_BUFFER, verbose=True, groups=(1, 1, 1)):
-        session = cls.SESSION
+                    usage_output=BufferUsage.STORAGE_BUFFER, groups=(1, 1, 1), verbose=True):
         shader = cls.shader_from_txt(glsl, verbose)
+        return cls.run_compiled_program(shader, bytez_input, bytez_output_size, usage_input, usage_output, groups)
+
+    @classmethod
+    def run_compiled_program(cls, shader, bytez_input, bytez_output_size, usage_input=BufferUsage.STORAGE_BUFFER,
+                             usage_output=BufferUsage.STORAGE_BUFFER, groups=(1, 1, 1)):
+        session = cls.SESSION
 
         buffer_in = cls.allocate_buffer(len(bytez_input), usage_input, MemoryType.CPU)
         buffer_out = cls.allocate_buffer(bytez_output_size, usage_output, MemoryType.CPU)

@@ -431,7 +431,6 @@ class Matrix(ByteRepresentation):
                 bytez += bytearray(padding)
 
         if self.order == Order.ROW_MAJOR:
-            print self.rows
             for row in range(self.rows):
                 bytez += self.vector.to_bytes([array[row][col] for col in range(self.cols)])
                 padding = (self.a - len(bytez) % self.a) % self.a
@@ -883,7 +882,17 @@ class ByteCache(object):
 
         if isinstance(key, str):
             if key not in self.definition.member_names:
-                raise ValueError("Did not find {} in member names".format(key))
+                possible_reasons = [
+                    "the definition was defined manually and the member names were not specified",
+                    "the definition was taken from shader bytecode, but it did not contain the member names "
+                    "(they are optional, the compiler must not put them in)"
+                ]
+                raise ValueError(
+                    "Did not find {} in member names. In case this is not a typo please reference by index, member "
+                    "names can be empty in following scenarios:\n{}".format(
+                        key, "".join(["* {}\n".format(reason) for reason in possible_reasons])
+                    )
+                )
             index = self.definition.member_names.index(key)
             return self.definition.definitions[index]
 
