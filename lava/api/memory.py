@@ -6,41 +6,6 @@ import vulkan as vk
 
 from lava.api.constants.vk import BufferUsage, DescriptorType
 
-# PushConstants
-# SampledImage
-# UniformBuffer
-# StorageImage
-# StorageBuffer
-
-# http://vulkan-spec-chunked.ahcox.com/ch09.html
-
-
-#         desired_flag = vk.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-#         mem_requirements_ping = vk.vkGetImageMemoryRequirements(self.device.handle, self.handle_ping)
-#         mem_requirements_pong = vk.vkGetImageMemoryRequirements(self.device.handle, self.handle_pong)
-#         mem_properties = vk.vkGetPhysicalDeviceMemoryProperties(self.device.physical_device.handle)
-#         mem_idx_invalid = 0xFFFFFFFF
-#         mem_idx = mem_idx_invalid
-#
-#         for i in range(mem_properties.memoryTypeCount):
-#             if ((mem_requirements_ping.memoryTypeBits & (2 ** i))
-#                     and (mem_requirements_pong.memoryTypeBits & (2 ** i))
-#                     and ((mem_properties.memoryTypes[i].propertyFlags & desired_flag) == desired_flag)):
-#                 mem_idx = i
-#
-#         if mem_idx == mem_idx_invalid:
-#             raise RuntimeError("No suitable memory found for allocation")
-#
-#         ping_size = mem_requirements_ping.size
-#         pong_align = mem_requirements_pong.alignment
-#
-#         offset = ping_size + pong_align - ping_size % pong_align
-#         size = offset + mem_requirements_pong.size
-#
-#         self.memory_handle = vk.vkAllocateMemory(self.device.handle, vk.VkMemoryAllocateInfo(
-#             allocationSize=size, memoryTypeIndex=mem_idx
-#         ), None)
-
 
 class Memory(object):
 
@@ -169,10 +134,11 @@ class Buffer(MemoryObject):
 
     def write_descriptor_set(self, descriptor_set_handle, binding):
         descriptor_type = self.descriptor_type()
-        # buffer_info = vk.VkDescriptorBufferInfo(self.handle, 0, vk.VK_WHOLE_SIZE)
         buffer_info = vk.VkDescriptorBufferInfo(self.handle, 0, self.size)
         return vk.VkWriteDescriptorSet(dstSet=descriptor_set_handle, dstBinding=binding,
                                        descriptorType=DescriptorType.to_vulkan(descriptor_type),
                                        pBufferInfo=[buffer_info])
 
-
+# PushConstants ?
+# SampledImage ?
+# StorageImage ?

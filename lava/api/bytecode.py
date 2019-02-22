@@ -184,6 +184,23 @@ class ByteCode(object):
 
         return offsets
 
+    def find_accesses(self, struct_id):
+        accesses = {}
+
+        instructions1 = self.find_instructions_with_attributes(OpMemberDecorate, type_id=struct_id,
+                                                               decoration=spirv.Decoration.NON_READABLE)
+        instructions2 = self.find_instructions_with_attributes(OpMemberDecorate, type_id=struct_id,
+                                                               decoration=spirv.Decoration.NON_WRITABLE)
+
+        for instruction in instructions1 + instructions2:
+            member = instruction.op.member
+
+            tmp = accesses.get(member, set())
+            tmp.add(instruction.op.decoration)
+            accesses[member] = tmp
+
+        return accesses
+
     def find_strides(self, array_id):
         array_ids = [array_id]
 

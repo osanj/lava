@@ -623,7 +623,11 @@ class Array(ByteRepresentation):
 
     def from_bytes(self, bytez):
         if isinstance(self.definition, Scalar):
-            return self.from_bytes_for_scalars(bytez)
+            import time
+            a = time.time()
+            tmp = self.from_bytes_for_scalars(bytez)
+            print "from_bytes_for_scalars", time.time() - a
+            return tmp
 
         elif isinstance(self.definition, Vector):
             return self.from_bytes_for_vectors(bytez)

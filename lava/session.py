@@ -5,6 +5,7 @@ import logging
 from lava.api.constants.vk import MemoryType, QueueType
 from lava.api.device import PhysicalDevice, Device
 from lava.api.instance import Instance
+from lava.shader import Stage
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,8 @@ class Session(object):
     def register_buffer(self, buffer):
         if buffer not in self.buffers:
             self.buffers.append(buffer)
+
+    # def
 
     #
     # def allocate_buffer(self, size):

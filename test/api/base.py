@@ -83,7 +83,7 @@ class GlslBasedTest(unittest.TestCase):
 
         buffer_in.map(bytez_input)
 
-        pipeline = Pipeline(session.device, shader, [buffer_in, buffer_out])
+        pipeline = Pipeline(session.device, shader, {0: buffer_in, 1: buffer_out})
         executor = Executor(session.device, pipeline, session.queue_index)
 
         executor.record(*groups)

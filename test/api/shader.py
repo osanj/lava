@@ -72,7 +72,7 @@ class TestByteCodeInspection(GlslBasedTest):
                 vec2[5][2][3] abc;
                 float bufferIn[5];
                 //bool flag;
-                layout(column_major) mat3x4 model;
+                mat3x4 model;
                 dmat3x2[99] modelz;
                 Data1[2] datas1;
                 Data2 datas2;

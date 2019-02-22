@@ -23,12 +23,12 @@ numpy + shaders = <3
     - [x] from shader
   - [ ] dynamic length
 - [ ] ~~images / samplers~~ (not for now)
-- [ ] push constants
-- [ ] bytecode analysis
+- [ ] ~~push constants~~
+- [x] bytecode analysis
   - [x] bindings
   - [x] local groups (?)
   - [x] misc (glsl version, entry point)
-  - [ ] parse type tree
+  - [x] parse type tree
 - [ ] pipelines
   - [ ] oneshot
   - [ ] synchronization based on dependency graph
@@ -86,3 +86,10 @@ numpy + shaders = <3
   * my 1080 would take forever at vkCreateComputePipelines for shaders with large arrays (?)
   * only related stuff I could find was https://www.gamedev.net/forums/topic/686518-extreme-long-compile-times-and-bad-performance-on-nvidia/
   * I updated to nvidia's 415 driver (previously had 390) and now it works, phew
+
+* 22.02.2019
+  * dropping push constants
+  * for flows to be usable each shader must declare readonly or writeonly access modifiers
+  * buffers can have one of the following behaviours
+    * unlimited read usages
+    * _one_ write usage and unlimited usages _afterwards_

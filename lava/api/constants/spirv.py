@@ -26,6 +26,13 @@ class Order(object):
     ROW_MAJOR = "row_major"
 
 
+class Access(object):
+    READ_ONLY = "read_only"
+    WRITE_ONLY = "write_only"
+    READ_WRITE = "read_write"
+    NEITHER = "neither"  # only "metadata" can be accessed, e.g. length of an array
+
+
 class SpirvEnum(object):
 
     _MAP = ()

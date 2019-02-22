@@ -6,7 +6,7 @@ import vulkan as vk
 
 from lava.api.bytecode import ByteCode
 from lava.api.bytes import Array, Matrix, Scalar, Struct, Vector
-from lava.api.constants.spirv import Decoration, ExecutionMode, ExecutionModel, Layout, Order, StorageClass
+from lava.api.constants.spirv import Access, Decoration, ExecutionMode, ExecutionModel, Layout, Order, StorageClass
 from lava.api.constants.vk import BufferUsage
 
 logger = logging.getLogger(__name__)
@@ -29,6 +29,7 @@ class Shader(object):
         self.definitions_matrix = None
         self.definitions_array = None
         self.definitions_struct = None
+        self.block_data = None
 
         # check / set entry point
         self.entry_point, self.entry_point_index = self.check_entry_point(entry_point)
@@ -75,6 +76,7 @@ class Shader(object):
 
     def inspect(self):
         self.inspect_definitons()
+        self.block_data = self.byte_code.find_blocks()
         for binding in self.get_bindings():
             self.inspect_layouts(binding)
 
@@ -259,19 +261,16 @@ class Shader(object):
             raise RuntimeError()
 
     def get_bindings(self):
-        block_data = self.byte_code.find_blocks()
         bindings = []
 
-        for index in block_data:
-            bindings.append(block_data[index][2])
+        for index in self.block_data:
+            bindings.append(self.block_data[index][2])
 
         return list(sorted(bindings))
 
     def get_block_index(self, binding):
-        block_data = self.byte_code.find_blocks()
-
-        for index in block_data:
-            block_type, storage_class, binding_id = block_data[index]
+        for index in self.block_data:
+            block_type, storage_class, binding_id = self.block_data[index]
 
             if binding_id == binding:
                 usage = None
@@ -294,3 +293,37 @@ class Shader(object):
 
     def get_block_usage(self, binding):
         return self.get_block(binding)[1]
+
+    def get_block_access(self, binding):
+        index, usage = self.get_block_index(binding)
+        block_definition, _ = self.get_block(binding)
+
+        if usage == BufferUsage.UNIFORM_BUFFER:
+            return Access.READ_ONLY
+
+        decorations = self.byte_code.find_accesses(index)
+
+        if len(decorations) not in (0, len(block_definition.definitions)):  # 0 for no access decorations at all
+            raise RuntimeError("Unexpected error in bytecode inspection")
+
+        accesses = set()
+
+        for member, d in decorations.iteritems():
+            if Decoration.NON_WRITABLE in d and Decoration.NON_READABLE not in d:
+                accesses.add(Access.READ_ONLY)
+            elif Decoration.NON_WRITABLE not in d and Decoration.NON_READABLE in d:
+                accesses.add(Access.WRITE_ONLY)
+            elif Decoration.NON_WRITABLE in d and Decoration.NON_READABLE in d:
+                accesses.add(Access.NEITHER)
+            else:
+                accesses.add(Access.READ_WRITE)
+
+        if len(accesses) == 0:
+            accesses.add(Access.READ_WRITE)
+        elif len(accesses) > 1:
+            raise RuntimeError("Unexpected error in bytecode inspection")
+
+        return accesses.pop()
+
+
+

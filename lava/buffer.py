@@ -19,34 +19,31 @@ class Buffer(object):
     def __init__(self, session, block_definition, block_usage, location):
         if not isinstance(block_definition, Struct):
             raise RuntimeError("Block definitions must be structs")
-        self.definition = block_definition
+        self.block_definition = block_definition
         self.block_usage = block_usage
         self.location = location
-        self.cache = ByteCache(self.definition)
 
         self.session = session
         self.vulkan_buffer = None
         self.vulkan_memory = None
         self.session.register_buffer(self)
+        self.in_sync = True
 
     def __del__(self):
         del self.vulkan_memory
         del self.vulkan_buffer
 
-    @classmethod
-    def from_shader(cls, session, shader, binding, location):
-        block_definition = shader.get_block_definition(binding)
-        block_usage = shader.get_block_usage(binding)
-        return cls(session, block_definition, block_usage, location)
-
-    def __getitem__(self, key):
-        return self.cache[key]
-
-    def __setitem__(self, key, value):
-        self.cache[key] = value
-
     def size(self):
-        return self.definition.size()
+        return self.block_definition.size()
+
+    def get_block_definition(self):
+        return self.block_definition
+
+    def get_block_usage(self):
+        return self.block_usage
+
+    def get_location(self):
+        return self.location
 
     def allocate(self):
         if self.vulkan_buffer is not None:
@@ -60,21 +57,60 @@ class Buffer(object):
         self.vulkan_memory = self.session.device.allocate_memory(memory_types, minimum_size)
         self.vulkan_buffer.bind_memory(self.vulkan_memory)
 
+
+class BufferCPU(Buffer):
+
+    def __init__(self, session, block_definition, block_usage):
+        super(BufferCPU, self).__init__(session, block_definition, block_usage, Buffer.LOCATION_CPU)
+        self.cache = ByteCache(self.block_definition)
+        self.buffer_gpu = None
+
+    def __del__(self):
+        super(BufferCPU, self).__del__()
+
+    @classmethod
+    def from_shader(cls, session, shader, binding):
+        block_definition = shader.get_block_definition(binding)
+        block_usage = shader.get_block_usage(binding)
+        return cls(session, block_definition, block_usage)
+
+    def __getitem__(self, key):
+        return self.cache[key]
+
+    def __setitem__(self, key, value):
+        self.cache[key] = value
+        self.in_sync = False
+
+    def is_synced(self):
+        return self.in_sync
+
     def write(self):
         data = self.cache.get_as_dict()
-        bytez = self.definition.to_bytes(data)
+        bytez = self.block_definition.to_bytes(data)
         self.vulkan_buffer.map(bytez)
+        self.in_sync = True
 
     def read(self):
         with self.vulkan_buffer.mapped() as bytebuffer:
             bytez = bytebuffer[:]
 
-        data = self.definition.from_bytes(bytez)
+        data = self.block_definition.from_bytes(bytez)
         self.cache.set_from_dict(data)
+        self.in_sync = True
+
+    def gpu(self):
+        if self.buffer_gpu is None:
+            self.buffer_gpu = BufferGPU(self.session, self.block_definition, self.block_usage)
+        raise NotImplementedError()
 
 
-class PushConstants(object):
+class BufferGPU(Buffer):
 
-    def __init__(self):
-        pass
+    def __init__(self, session, block_definition, block_usage):
+        super(BufferGPU, self).__init__(session, block_definition, block_usage, Buffer.LOCATION_CPU)
+        self.buffer_cpu = None
 
+    def cpu(self):
+        if self.buffer_cpu is None:
+            buffer_cpu = BufferCPU(self.session, self.block_definition, self.block_usage)
+        raise NotImplementedError()

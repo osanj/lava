@@ -6,10 +6,9 @@ import os
 
 import numpy as np
 
-from lava.api.pipeline import Executor, Pipeline
-from lava.buffer import Buffer
+from lava.buffer import BufferCPU
 from lava.session import Session
-from lava.shader import Shader
+from lava.shader import Shader, Stage
 from lava.util import compile_glsl
 
 from test import TestUtil
@@ -48,6 +47,37 @@ class SessionTest(unittest.TestCase):
         for x in dir(properties.limits):
             print x, getattr(properties.limits, x)
 
+    def test_image_through(self):
+        glsl_template = """
+            #version 450
+            #extension GL_ARB_separate_shader_objects : enable
+
+            layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
+
+            layout({}, binding = 0) buffer BufferA {{
+                {}[720][1280][3] imageIn;
+            }};
+
+            layout({}, binding = 1) buffer BufferB {{
+                {}[720][1280][3] imageOut;
+            }};
+
+            void main() {{
+                vec3 pixel = gl_GlobalInvocationID;
+                int h = int(pixel.x);
+                int w = int(pixel.y);
+                int c = int(pixel.z);
+                
+                imageOut[h][w][c] = imageIn[h][w][c];
+            }}
+            """
+
+        glsl = glsl_template.format()
+        shader = self.shader_from_txt(glsl)
+
+        buffer_im_in = BufferCPU.from_shader(self.session, shader, binding=0)
+        buffer_im_out = BufferCPU.from_shader(self.session, shader, binding=1)
+
     def test_convolution(self):
         glsl = """
             #version 450
@@ -55,18 +85,18 @@ class SessionTest(unittest.TestCase):
             
             layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
 
-            layout(std430, binding = 0) buffer BufferA {
+            layout(std140, binding = 0) buffer readonly BufferA {
                 //float[30][30][3] imageIn;
                 //float[300][300][3] imageIn;
                 float[720][1280][3] imageIn;
             };
 
-            layout(std430, binding = 1) buffer BufferB {
+            layout(std430, binding = 1) buffer readonly BufferB {
                 float[5][5] convWeights;
             };
             
             
-            layout(std430, binding = 2) buffer BufferC {
+            layout(std140, binding = 2) buffer writeonly BufferC {
                 //float[30][30][3] imageOut;
                 //float[300][300][3] imageOut;
                 float[720][1280][3] imageOut;
@@ -117,15 +147,15 @@ class SessionTest(unittest.TestCase):
 
         shader = self.shader_from_txt(glsl, clean_up=False)
 
-        buffer_im_in = Buffer.from_shader(self.session, shader, binding=0, location=Buffer.LOCATION_CPU)
-        buffer_weights_in = Buffer.from_shader(self.session, shader, binding=1, location=Buffer.LOCATION_CPU)
-        buffer_im_out = Buffer.from_shader(self.session, shader, binding=2, location=Buffer.LOCATION_CPU)
+        buffer_im_in = BufferCPU.from_shader(self.session, shader, binding=0)
+        buffer_weights_in = BufferCPU.from_shader(self.session, shader, binding=1)
+        buffer_im_out = BufferCPU.from_shader(self.session, shader, binding=2)
 
-        print buffer_im_in.definition
+        print buffer_im_in.block_definition
         print ""
-        print buffer_weights_in.definition
+        print buffer_weights_in.block_definition
         print ""
-        print buffer_im_out.definition
+        print buffer_im_out.block_definition
         print ""
 
         buffer_im_in.allocate()
@@ -139,16 +169,9 @@ class SessionTest(unittest.TestCase):
         buffer_im_in["imageIn"] = im.astype(np.float32)
         buffer_weights_in["convWeights"] = np.ones((5, 5), dtype=np.float32) / (5 * 5)
 
-        buffer_im_in.write()
-        buffer_weights_in.write()
-
-        pipeline = Pipeline(self.session.device, shader.vulkan_shader, [buffer_im_in.vulkan_buffer, buffer_weights_in.vulkan_buffer, buffer_im_out.vulkan_buffer])
-        executor = Executor(self.session.device, pipeline, self.session.queue_index)
-
-        executor.record(*im.shape)
-        executor.execute_and_wait()
-
-        buffer_im_out.read()
+        stage = Stage(shader, {0: buffer_im_in, 1: buffer_weights_in, 2: buffer_im_out})
+        stage.record(*im.shape)
+        stage.run_and_wait()
 
         im_filtered = buffer_im_out["imageOut"]
 
