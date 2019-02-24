@@ -190,7 +190,7 @@ class CopyOperation(object):
 
         vk.vkEndCommandBuffer(self.command_buffer_handle)
 
-    def execute(self):
+    def run(self):
         queue_handle = self.device.get_queue_handle(QueueType.COMPUTE)
 
         submit_info = vk.VkSubmitInfo(pCommandBuffers=[self.command_buffer_handle])
@@ -201,6 +201,6 @@ class CopyOperation(object):
         vk.vkWaitForFences(self.device.handle, 1, [self.fence.handle], True, TIMEOUT_FOREVER)
         vk.vkResetFences(self.device.handle, 1, [self.fence.handle])
 
-    def execute_and_wait(self):
-        self.execute()
+    def run_and_wait(self):
+        self.run()
         self.wait()

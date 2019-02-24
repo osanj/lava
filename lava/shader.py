@@ -4,8 +4,6 @@ import logging
 import time
 import warnings
 
-from lava.buffer import BufferCPU
-from lava.api.constants.spirv import Access
 from lava.api.constants.vk import BufferUsage
 from lava.api.pipeline import ShaderOperation, Pipeline
 from lava.api.shader import Shader as _Shader
@@ -93,7 +91,7 @@ class Stage(object):
                         binding, max_uniform_size)
                     warnings.warn(msg, UserWarning)
 
-            memory_object_binding[binding] = buffer.vulkan_buffer
+            memory_object_binding[binding] = buffer.get_vulkan_buffer()
         return memory_object_binding
 
     def record(self, x, y, z, after_stages=(),):
@@ -110,13 +108,8 @@ class Stage(object):
         t00 = time.time()
 
         for binding, buffer in self.bindings.iteritems():
-            access = self.shader.get_block_access(binding)
-
-            if isinstance(buffer, BufferCPU):
-                if not buffer.is_synced() and access in [Access.READ_ONLY, Access.READ_WRITE]:
-                    a = time.time()
-                    buffer.write()
-                    print "buffer write", time.time() - a
+            access_modifier = self.shader.get_block_access(binding)
+            buffer.before_stage(self, binding, access_modifier)
 
         print "prestage", time.time() - t00
         self.t0 = time.time()
@@ -125,23 +118,11 @@ class Stage(object):
     def wait(self):
         self.executor.wait()
         t1 = time.time()
-        print ""
         print "stage", t1 - self.t0
-        print ""
 
         for binding, buffer in self.bindings.iteritems():
-            access = self.shader.get_block_access(binding)
-
-            if isinstance(buffer, BufferCPU):
-                if access in [Access.WRITE_ONLY, Access.READ_WRITE]:
-                    if not buffer.is_synced():
-                        msg = "Cache of cpu buffer backing binding {} contains unmapped data, it will be overwritten"\
-                            .format(binding)
-                        warnings.warn(msg, RuntimeWarning)
-
-                    a = time.time()
-                    buffer.read()
-                    print "buffer read", time.time() - a
+            access_modifier = self.shader.get_block_access(binding)
+            buffer.after_stage(self, binding, access_modifier)
 
         t11 = time.time()
         print "poststage",  t11 - t1

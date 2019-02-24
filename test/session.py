@@ -6,7 +6,7 @@ import os
 
 import numpy as np
 
-from lava.buffer import BufferCPU
+from lava.buffer import BufferCPU, BufferGPU, StagedBuffer
 from lava.session import Session
 from lava.shader import Shader, Stage
 from lava.util import compile_glsl
@@ -44,8 +44,13 @@ class SessionTest(unittest.TestCase):
         import vulkan as vk
 
         properties = vk.vkGetPhysicalDeviceProperties(self.session.device.physical_device.handle)
-        for x in dir(properties.limits):
-            print x, getattr(properties.limits, x)
+        # for x in dir(properties.limits):
+        #     print x, getattr(properties.limits, x)
+
+        # print ""
+        print "max compute work group count      ", properties.limits.maxComputeWorkGroupCount[0], properties.limits.maxComputeWorkGroupCount[1], properties.limits.maxComputeWorkGroupCount[2]
+        print "max compute work group invocations", properties.limits.maxComputeWorkGroupInvocations
+        print "max compute work group size       ", properties.limits.maxComputeWorkGroupSize[0], properties.limits.maxComputeWorkGroupSize[1], properties.limits.maxComputeWorkGroupSize[2]
 
     def test_image_through(self):
         glsl_template = """
@@ -85,28 +90,30 @@ class SessionTest(unittest.TestCase):
             
             layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
 
-            layout(std140, binding = 0) buffer readonly BufferA {
-                //float[30][30][3] imageIn;
-                //float[300][300][3] imageIn;
+            //layout(std140, binding = 0) buffer readonly BufferA {
+            layout(std430, binding = 0) buffer readonly BufferA {
+            //layout(std140, binding = 0) uniform BufferA {
                 float[720][1280][3] imageIn;
+                //float[352][626][3] imageIn;
             };
 
+            //layout(std140, binding = 1) buffer readonly BufferB {
             layout(std430, binding = 1) buffer readonly BufferB {
+            //layout(std140, binding = 1) uniform BufferB {
                 float[5][5] convWeights;
             };
             
             
-            layout(std140, binding = 2) buffer writeonly BufferC {
-                //float[30][30][3] imageOut;
-                //float[300][300][3] imageOut;
+            layout(std430, binding = 2) buffer writeonly BufferC {
                 float[720][1280][3] imageOut;
+                //float[352][626][3] imageOut;
             };
             
+            int height = imageIn.length();
+            int width = imageIn[0].length();
+            int channels = imageIn[0][0].length();
+            
             bool inputHasPixel(int y, int x, int c) {
-                int height = imageIn.length();
-                int width = imageIn[0].length();
-                int channels = imageIn[0][0].length();
-                
                 return !(y < 0 || y >= height || x < 0 || x >= width || c < 0 || c >= channels);
             }
                         
@@ -133,36 +140,30 @@ class SessionTest(unittest.TestCase):
                     return;
                 }
                 
-                imageOut[h][w][c] = 0;
+                float filteredPixel = 0;
 
                 for (int i = 0; i < filterHeight; i++) {
                     for (int j = 0; j < filterWidth; j++) {
                         float a = inputPixel(h - fdh + i, w - fdw + j, c, 0.0);
                         float b = convWeights[i][j];
-                        imageOut[h][w][c] += a * b;
+                        filteredPixel += a * b;
                     }
                 }
+                
+                imageOut[h][w][c] = filteredPixel;
+                //imageOut[h][w][c] = 128;
+                //imageOut[h][w][c] = imageIn[h][w][c];
             }
             """
 
         shader = self.shader_from_txt(glsl, clean_up=False)
 
-        buffer_im_in = BufferCPU.from_shader(self.session, shader, binding=0)
-        buffer_weights_in = BufferCPU.from_shader(self.session, shader, binding=1)
-        buffer_im_out = BufferCPU.from_shader(self.session, shader, binding=2)
-
-        print buffer_im_in.block_definition
-        print ""
-        print buffer_weights_in.block_definition
-        print ""
-        print buffer_im_out.block_definition
-        print ""
-
-        buffer_im_in.allocate()
-        buffer_weights_in.allocate()
-        buffer_im_out.allocate()
+        buffer_im_in = StagedBuffer.from_shader(self.session, shader, binding=0)
+        buffer_weights_in = StagedBuffer.from_shader(self.session, shader, binding=1)
+        buffer_im_out = StagedBuffer.from_shader(self.session, shader, binding=2)
 
         import cv2 as cv
+        import time
 
         im = cv.imread("image.jpg", cv.IMREAD_COLOR)
 
@@ -170,8 +171,18 @@ class SessionTest(unittest.TestCase):
         buffer_weights_in["convWeights"] = np.ones((5, 5), dtype=np.float32) / (5 * 5)
 
         stage = Stage(shader, {0: buffer_im_in, 1: buffer_weights_in, 2: buffer_im_out})
+
         stage.record(*im.shape)
+        #stage.record(int(im.shape[0] / 38. + 0.5), int(im.shape[1] / 38. + 0.5), 3)
+        #stage.record(1, 1, 1)
+
+        t0 = time.time()
         stage.run_and_wait()
+        print "run_and_wait", time.time() - t0
+
+        print ""
+        print ""
+        print ""
 
         im_filtered = buffer_im_out["imageOut"]
 
