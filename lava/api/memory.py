@@ -88,8 +88,12 @@ class Buffer(MemoryObject):
         self.usage = usage
         self.queue_index = queue_index
 
+        usage_flags = BufferUsage.to_vulkan(usage)
+        usage_flags |= vk.VK_BUFFER_USAGE_TRANSFER_SRC_BIT
+        usage_flags |= vk.VK_BUFFER_USAGE_TRANSFER_DST_BIT
+
         create_info = vk.VkBufferCreateInfo(
-            size=self.size, usage=BufferUsage.to_vulkan(usage), sharingMode=vk.VK_SHARING_MODE_EXCLUSIVE,
+            size=self.size, usage=usage_flags, sharingMode=vk.VK_SHARING_MODE_EXCLUSIVE,
             pQueueFamilyIndices=[queue_index]
         )
 
@@ -100,7 +104,13 @@ class Buffer(MemoryObject):
 
     def get_memory_requirements(self):
         requirements = vk.vkGetBufferMemoryRequirements(self.device.handle, self.handle)
-        return requirements.size, requirements.alignment
+
+        supported_memory_indices = []
+        for i in range(32):
+            if requirements.memoryTypeBits & (1 << i) > 0:
+                supported_memory_indices.append(i)
+
+        return requirements.size, requirements.alignment, supported_memory_indices
 
     def bind_memory(self, memory, offset=0):
         super(Buffer, self).bind_memory(memory, offset)

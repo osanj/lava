@@ -12,7 +12,7 @@ from lava.api.bytes import Array, Matrix, Vector, Scalar, Struct
 from lava.api.constants.spirv import DataType, Layout, Order
 from lava.api.constants.vk import BufferUsage, MemoryType
 from lava.api.memory import Buffer
-from lava.api.pipeline import Executor, Pipeline
+from lava.api.pipeline import ShaderOperation, Pipeline
 from lava.api.shader import Shader
 from lava.session import Session
 from lava.util import compile_glsl
@@ -56,7 +56,8 @@ class GlslBasedTest(unittest.TestCase):
     @classmethod
     def allocate_buffer(cls, size, usage, types):
         buf = Buffer(cls.SESSION.device, size, usage, cls.SESSION.queue_index)
-        mem = cls.SESSION.device.allocate_memory(types, buf.get_memory_requirements()[0])
+        min_size, _, supported_indices = buf.get_memory_requirements()
+        mem = cls.SESSION.device.allocate_memory(types, min_size, supported_indices)
         buf.bind_memory(mem)
         cls.MEMORY[buf] = (buf, mem)
         return buf
@@ -84,15 +85,15 @@ class GlslBasedTest(unittest.TestCase):
         buffer_in.map(bytez_input)
 
         pipeline = Pipeline(session.device, shader, {0: buffer_in, 1: buffer_out})
-        executor = Executor(session.device, pipeline, session.queue_index)
+        operation = ShaderOperation(session.device, pipeline, session.queue_index)
 
-        executor.record(*groups)
-        executor.execute_and_wait()
+        operation.record(*groups)
+        operation.run_and_wait()
 
         with buffer_out.mapped() as bytebuffer:
             bytez_output = bytebuffer[:]
 
-        del executor
+        del operation
         del pipeline
         cls.destroy_buffer(buffer_in)
         cls.destroy_buffer(buffer_out)

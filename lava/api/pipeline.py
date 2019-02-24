@@ -95,7 +95,7 @@ class Pipeline(object):
         return self.pipeline_layout_handle
 
 
-class Executor(object):
+class ShaderOperation(object):
 
     def __init__(self, device, pipeline, queue_index):
         self.device = device
@@ -114,7 +114,6 @@ class Executor(object):
 
         allocate_info = vk.VkCommandBufferAllocateInfo(commandPool=self.command_pool_handle,
                                                        level=vk.VK_COMMAND_BUFFER_LEVEL_PRIMARY, commandBufferCount=1)
-
         self.command_buffer_handle = vk.vkAllocateCommandBuffers(self.device.handle, allocate_info)[0]
 
     def __del__(self):
@@ -151,6 +150,46 @@ class Executor(object):
 
         vk.vkEndCommandBuffer(self.command_buffer_handle)
 
+    def run(self):
+        queue_handle = self.device.get_queue_handle(QueueType.COMPUTE)
+
+        submit_info = vk.VkSubmitInfo(pCommandBuffers=[self.command_buffer_handle])
+
+        vk.vkQueueSubmit(queue_handle, 1, [submit_info], self.fence.handle)
+
+    def wait(self):
+        vk.vkWaitForFences(self.device.handle, 1, [self.fence.handle], True, TIMEOUT_FOREVER)
+        vk.vkResetFences(self.device.handle, 1, [self.fence.handle])
+
+    def run_and_wait(self):
+        self.run()
+        self.wait()
+
+
+class CopyOperation(object):
+
+    def __init__(self, device, queue_index):
+        self.device = device
+        self.queue_index = queue_index
+        self.fence = Fence(self.device, signalled=False)
+
+        command_pool_create_info = vk.VkCommandPoolCreateInfo(flags=vk.VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+                                                              queueFamilyIndex=queue_index)
+        self.command_pool_handle = vk.vkCreateCommandPool(self.device.handle, command_pool_create_info, None)
+
+        allocation_info = vk.VkCommandBufferAllocateInfo(commandPool=self.command_pool_handle, commandBufferCount=1,
+                                                         level=vk.VK_COMMAND_BUFFER_LEVEL_PRIMARY)
+        self.command_buffer_handle = vk.vkAllocateCommandBuffers(self.device.handle, allocation_info)[0]
+
+    def record(self, src_buffer, dst_buffer):
+        vk.vkBeginCommandBuffer(self.command_buffer_handle,
+                                vk.VkCommandBufferBeginInfo(flags=vk.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT))
+
+        region = vk.VkBufferCopy(0, 0, src_buffer.get_size())
+        vk.vkCmdCopyBuffer(self.command_buffer_handle, src_buffer.handle, dst_buffer.handle, 1, [region])
+
+        vk.vkEndCommandBuffer(self.command_buffer_handle)
+
     def execute(self):
         queue_handle = self.device.get_queue_handle(QueueType.COMPUTE)
 
@@ -165,4 +204,3 @@ class Executor(object):
     def execute_and_wait(self):
         self.execute()
         self.wait()
-

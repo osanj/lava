@@ -72,7 +72,7 @@ class PhysicalDevice(object):
     def supports_queue_type(self, queue_type):
         return self.queue_support[queue_type]
 
-    def get_memory_index(self, *memory_types):
+    def get_memory_index(self, memory_types, supported_memory_indices):
         sets_of_indices = []
 
         for memory_type in memory_types:
@@ -82,10 +82,12 @@ class PhysicalDevice(object):
         for other_indices in sets_of_indices[1:]:
             indices.intersection_update(other_indices)
 
+        indices.intersection_update(set(supported_memory_indices))
+
         if len(indices) == 0:
             return None
         else:
-            return indices.pop()  # TODO: better way than just picking first/random index?
+            return min(list(indices))
 
     def get_maximum_uniform_size(self):
         return self.uniform_max_bytes
@@ -153,8 +155,8 @@ class Device(object):
     def get_queue_index(self, queue_type):
         return self.queue_indices[queue_type]
 
-    def allocate_memory(self, memory_types, size):
-        memory_index = self.physical_device.get_memory_index(*memory_types)
+    def allocate_memory(self, memory_types, size, supported_memory_indices):
+        memory_index = self.physical_device.get_memory_index(memory_types, supported_memory_indices)
 
         if memory_index is None:
             raise RuntimeError("Could not find a device memory which supports {}".format(" and ".join(memory_types)))

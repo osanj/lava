@@ -7,7 +7,7 @@ import warnings
 from lava.buffer import BufferCPU
 from lava.api.constants.spirv import Access
 from lava.api.constants.vk import BufferUsage
-from lava.api.pipeline import Executor, Pipeline
+from lava.api.pipeline import ShaderOperation, Pipeline
 from lava.api.shader import Shader as _Shader
 
 
@@ -45,7 +45,7 @@ class Stage(object):
         memory_object_binding = self.check_block_definitions()
 
         self.pipeline = Pipeline(self.session.device, shader.vulkan_shader, memory_object_binding)
-        self.executor = Executor(self.session.device, self.pipeline, self.session.queue_index)
+        self.executor = ShaderOperation(self.session.device, self.pipeline, self.session.queue_index)
 
     def check_workgroups(self):
         physical_device = self.session.device.physical_device
@@ -120,7 +120,7 @@ class Stage(object):
 
         print "prestage", time.time() - t00
         self.t0 = time.time()
-        self.executor.execute()
+        self.executor.run()
 
     def wait(self):
         self.executor.wait()

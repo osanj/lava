@@ -65,8 +65,8 @@ class QueueType(VulkanEnum):
 class MemoryType(VulkanEnum):
     # https://www.khronos.org/registry/vulkan/specs/1.1-extensions/man/html/VkMemoryPropertyFlagBits.html
 
-    DEVICE_LOCAL = "DEVICE_LOCAL"  # memory only accessible for gpu
-    HOST_VISIBLE = "HOST_VISIBLE"  # memory th
+    DEVICE_LOCAL = "DEVICE_LOCAL"
+    HOST_VISIBLE = "HOST_VISIBLE"
     HOST_COHERENT = "HOST_COHERENT"
     HOST_CACHED = "HOST_CACHED"
     LAZILY_ALLOCATED = "LAZILY_ALLOCATED"
@@ -89,10 +89,14 @@ class BufferUsage(VulkanEnum):
 
     UNIFORM_BUFFER = "UNIFORM_BUFFER"
     STORAGE_BUFFER = "STORAGE_BUFFER"
+    TRANSFER_SRC = "TRANSFER_SRC"
+    TRANSFER_DST = "TRANSFER_DST"
 
     _MAP = (
         (UNIFORM_BUFFER, vk.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT),
         (STORAGE_BUFFER, vk.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT),
+        (TRANSFER_SRC, vk.VK_BUFFER_USAGE_TRANSFER_SRC_BIT),
+        (TRANSFER_DST, vk.VK_BUFFER_USAGE_TRANSFER_DST_BIT)
     )
 
 
