@@ -19,6 +19,10 @@ class PhysicalDevice(object):
         properties = vk.vkGetPhysicalDeviceProperties(self.handle)
         self.device_name = properties.deviceName
         self.device_type = DeviceType.from_vulkan(properties.deviceType)
+        self.uniform_max_bytes = properties.limits.maxUniformBufferRange
+        self.work_group_max_invocations = properties.limits.maxComputeWorkGroupInvocations
+        self.work_group_max_sizes = [properties.limits.maxComputeWorkGroupSize[i] for i in range(3)]
+        self.work_group_max_counts = [properties.limits.maxComputeWorkGroupCount[i] for i in range(3)]
 
         # queue information
         queue_families = vk.vkGetPhysicalDeviceQueueFamilyProperties(self.handle)
@@ -82,6 +86,18 @@ class PhysicalDevice(object):
             return None
         else:
             return indices.pop()  # TODO: better way than just picking first/random index?
+
+    def get_maximum_uniform_size(self):
+        return self.uniform_max_bytes
+
+    def get_maximum_work_group_sizes(self):
+        return self.work_group_max_sizes
+
+    def get_maximum_work_group_counts(self):
+        return self.work_group_max_counts
+
+    def get_maximum_work_group_invocations(self):
+        return self.work_group_max_invocations
 
 
 class Device(object):
