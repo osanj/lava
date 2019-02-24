@@ -566,15 +566,18 @@ class Array(ByteRepresentation):
         if tuple(array.shape) != self.shape():
             raise RuntimeError("Array has shape {}, expected {}".format(array.shape, self.shape()))
 
-        p = (self.a - self.definition.alignment()) / self.definition.size()
-        a = self.a / self.definition.size()
+        if self.layout == Layout.STD430:
+            return array.flatten().tobytes()
 
-        array_padded = np.zeros(a * np.product(array.shape), dtype=array.dtype)
-        mask = (np.arange(len(array_padded)) % a) < (a - p)
-        array_padded[mask] = array.flatten()
+        else:
+            p = (self.a - self.definition.alignment()) / self.definition.size()
+            a = self.a / self.definition.size()
 
-        # for std430 the following would be sufficient: return array.flatten().tobytes()
-        return array_padded.tobytes()
+            array_padded = np.zeros(a * np.product(array.shape), dtype=array.dtype)
+            mask = (np.arange(len(array_padded)) % a) < (a - p)
+            array_padded[mask] = array.flatten()
+
+            return array_padded.tobytes()
 
     def to_bytes_for_vectors(self, array):
         numpy_dtype = self.definition.scalar.numpy_dtype()
@@ -623,11 +626,7 @@ class Array(ByteRepresentation):
 
     def from_bytes(self, bytez):
         if isinstance(self.definition, Scalar):
-            import time
-            a = time.time()
-            tmp = self.from_bytes_for_scalars(bytez)
-            print "from_bytes_for_scalars", time.time() - a
-            return tmp
+            return self.from_bytes_for_scalars(bytez)
 
         elif isinstance(self.definition, Vector):
             return self.from_bytes_for_vectors(bytez)
@@ -653,12 +652,18 @@ class Array(ByteRepresentation):
             return values
 
     def from_bytes_for_scalars(self, bytez):
-        p = (self.a - self.definition.alignment()) / self.definition.size()
-        a = self.a / self.definition.size()
+        if self.layout == Layout.STD430:
+            array_flat = np.frombuffer(bytez, dtype=self.definition.numpy_dtype())
 
-        array_padded = np.frombuffer(bytez, dtype=self.definition.numpy_dtype())
-        mask = (np.arange(a * np.product(self.shape())) % a) < (a - p)
-        return array_padded[mask].reshape(self.shape())
+        else:
+            p = (self.a - self.definition.alignment()) / self.definition.size()
+            a = self.a / self.definition.size()
+
+            array_padded = np.frombuffer(bytez, dtype=self.definition.numpy_dtype())
+            mask = (np.arange(a * np.product(self.shape())) % a) < (a - p)
+            array_flat = array_padded[mask]
+
+        return array_flat.reshape(self.shape())
 
     def from_bytes_for_vectors(self, bytez):
         shape = tuple(list(self.shape()) + [self.definition.length()])
@@ -863,7 +868,7 @@ class ByteCache(object):
 
             elif isinstance(d, Array) and isinstance(d.definition, Struct):
                 for indices in itertools.product(*[range(s) for s in d.shape()]):
-                    _value = values
+                    _value = values[d]
                     _cache = self.values[d]
 
                     for index in indices:
