@@ -72,91 +72,81 @@ class Shader(object):
         return self.entry_point
 
     def get_local_size(self):
-        return self.local_size  # self.byte_code.find_local_size(self.entry_point, ExecutionModel.GL_COMPUTE)
+        return self.local_size
 
     def inspect(self):
-        self.inspect_definitons()
         self.block_data = self.byte_code.find_blocks()
-        for binding in self.get_bindings():
-            self.inspect_layouts(binding)
-
-    def inspect_definitons(self):
-        default_layout = Layout.STD140
-        default_order = Order.COLUMN_MAJOR
 
         self.definitions_scalar = {index: Scalar.of(dtype) for index, dtype in self.byte_code.types_scalar.items()}
         self.definitions_vector = {index: Vector(n, dtype) for index, (dtype, n) in self.byte_code.types_vector.items()}
         self.definitions_array = {}
         self.definitions_struct = {}
 
-        candidates_array = list(self.byte_code.types_array.keys())
-        candidates_struct = list(self.byte_code.types_struct.keys())
+        for binding in self.get_bindings():
+            self.build_definition(self.get_block_index(binding)[0])
+            self.deduce_layout(binding)
 
-        while len(candidates_array) > 0 or len(candidates_struct) > 0:
-            for index in candidates_array:
-                type_index, dims = self.byte_code.types_array[index]
+    def build_definition(self, index):
+        default_layout = Layout.STD140
+        default_order = Order.COLUMN_MAJOR
 
-                # skip array of undefined struct
-                if type_index in self.byte_code.types_struct and type_index not in self.definitions_struct:
-                    break
+        if index in self.byte_code.types_array:
+            type_index, dims = self.byte_code.types_array[index]
 
+            # build missing definition
+            if type_index in self.byte_code.types_struct and type_index not in self.definitions_struct:
+                self.build_definition(type_index)
+
+            definition = None
+
+            # matrix types are shared, but still affected by the layout, create a instance for every occurrence
+            if type_index in self.byte_code.types_matrix:
+                dtype, rows, cols = self.byte_code.types_matrix[type_index]
+                definition = Matrix(cols, rows, dtype, default_layout, default_order)
+
+            definition = definition or self.definitions_scalar.get(type_index, None)
+            definition = definition or self.definitions_vector.get(type_index, None)
+            definition = definition or self.definitions_struct.get(type_index, None)
+
+            self.definitions_array[index] = Array(definition, dims, default_layout)
+
+        elif index in self.byte_code.types_struct:
+            member_indices = self.byte_code.types_struct[index]
+
+            # build missing definitions
+            for member_index in member_indices:
+                is_struct = member_index in self.byte_code.types_struct
+                is_array = member_index in self.byte_code.types_array
+
+                if is_struct and member_index not in self.definitions_struct:
+                    self.build_definition(member_index)
+
+                if is_array and member_index not in self.definitions_array:
+                    self.build_definition(member_index)
+
+            definitions = []
+            for member_index in member_indices:
                 definition = None
 
                 # matrix types are shared, but still affected by the layout, create a instance for every occurrence
-                if type_index in self.byte_code.types_matrix:
-                    dtype, rows, cols = self.byte_code.types_matrix[type_index]
+                if member_index in self.byte_code.types_matrix:
+                    dtype, rows, cols = self.byte_code.types_matrix[member_index]
                     definition = Matrix(cols, rows, dtype, default_layout, default_order)
 
-                definition = definition or self.definitions_scalar.get(type_index, None)
-                definition = definition or self.definitions_vector.get(type_index, None)
-                definition = definition or self.definitions_struct.get(type_index, None)
+                definition = definition or self.definitions_scalar.get(member_index, None)
+                definition = definition or self.definitions_vector.get(member_index, None)
+                definition = definition or self.definitions_array.get(member_index, None)
+                definition = definition or self.definitions_struct.get(member_index, None)
+                definitions.append(definition)
 
-                self.definitions_array[index] = Array(definition, dims, default_layout)
-                candidates_array.remove(index)
+            struct_name, member_names = self.byte_code.find_names(index)
+            self.definitions_struct[index] = Struct(definitions, default_layout, member_names=member_names,
+                                                    type_name=struct_name)
 
-            for index in candidates_struct:
-                member_indices = self.byte_code.types_struct[index]
+        else:
+            raise RuntimeError("Unexpected parsing error")
 
-                skip = False
-                for member_index in member_indices:
-                    is_struct = member_index in self.byte_code.types_struct
-                    is_array = member_index in self.byte_code.types_array
-
-                    # skip undefined struct
-                    if is_struct and member_index not in self.definitions_struct:
-                        skip = True
-                        break
-
-                    # skip array of undefined struct
-                    if is_array and member_index not in self.definitions_array:
-                        skip = True
-                        break
-
-                if skip:
-                    continue
-
-                definitions = []
-                for member_index in member_indices:
-                    definition = None
-
-                    # matrix types are shared, but still affected by the layout, create a instance for every occurrence
-                    if member_index in self.byte_code.types_matrix:
-                        dtype, rows, cols = self.byte_code.types_matrix[member_index]
-                        definition = Matrix(cols, rows, dtype, default_layout, default_order)
-
-                    definition = definition or self.definitions_scalar.get(member_index, None)
-                    definition = definition or self.definitions_vector.get(member_index, None)
-                    definition = definition or self.definitions_array.get(member_index, None)
-                    definition = definition or self.definitions_struct.get(member_index, None)
-                    definitions.append(definition)
-
-                struct_name, member_names = self.byte_code.find_names(index)
-                self.definitions_struct[index] = Struct(definitions, default_layout, member_names=member_names,
-                                                        type_name=struct_name)
-
-                candidates_struct.remove(index)
-
-    def inspect_layouts(self, binding):
+    def deduce_layout(self, binding):
         index, usage = self.get_block_index(binding)
 
         self.set_layout(index, Layout.STD140)
