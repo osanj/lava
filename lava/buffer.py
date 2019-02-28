@@ -9,6 +9,8 @@ from lava.api.constants.vk import BufferUsage, MemoryType
 from lava.api.memory import Buffer as _Buffer
 from lava.api.pipeline import CopyOperation
 
+__all__ = ["BufferCPU", "BufferGPU", "StagedBuffer"]
+
 
 class BufferInterface(object):
 
@@ -17,6 +19,7 @@ class BufferInterface(object):
 
     SYNC_EAGER = "eager"
     SYNC_LAZY = "lazy"
+    SYNC_MANUAL = "manual"
 
     def __init__(self, session, block_definition, block_usage):
         if not isinstance(block_definition, Struct):
@@ -102,8 +105,9 @@ class BufferCPU(Buffer):
     def __init__(self, session, block_definition, block_usage, sync_mode=BufferInterface.SYNC_LAZY):
         super(BufferCPU, self).__init__(session, block_definition, block_usage, Buffer.LOCATION_CPU)
         self.cache = ByteCache(self.block_definition)
-        self.cache_in_sync = True
         self.sync_mode = sync_mode
+        self.fresh_cache = False
+        self.fresh_bytez = False
 
     @classmethod
     def from_shader(cls, session, shader, binding):
@@ -112,45 +116,52 @@ class BufferCPU(Buffer):
         return cls(session, block_definition, block_usage)
 
     def before_stage(self, stage, binding, access_modifier):
-        if access_modifier in [Access.READ_ONLY, Access.READ_WRITE] and not self.cache_in_sync:
-            self.flush()
-        if access_modifier in [Access.WRITE_ONLY, Access.READ_WRITE]:
-            self.cache_in_sync = False
+        if access_modifier in [Access.READ_ONLY, Access.READ_WRITE]:
+            if self.sync_mode is self.SYNC_LAZY and self.fresh_cache:
+                self.flush()
 
     def after_stage(self, stage, binding, access_modifier):
-        if access_modifier in [Access.WRITE_ONLY, Access.READ_WRITE] and self.sync_mode == self.SYNC_EAGER:
-            self.fetch()
+        if access_modifier in [Access.WRITE_ONLY, Access.READ_WRITE]:
+            self.fresh_bytez = True
+            if self.sync_mode is self.SYNC_EAGER:
+                self.fetch()
 
     def __getitem__(self, key):
-        if not self.cache_in_sync:
+        if self.fresh_bytez and self.sync_mode is self.SYNC_LAZY:
             self.fetch()
         return self.cache[key]
 
     def __setitem__(self, key, value):
         self.cache[key] = value
-        self.cache_in_sync = False
+        self.fresh_cache = True
 
-        if self.sync_mode == self.SYNC_EAGER:
+        if self.sync_mode is self.SYNC_EAGER:
             self.flush()
 
     def is_synced(self):
-        return self.cache_in_sync
+        return not self.fresh_bytez and not self.fresh_cache
 
     def flush(self):
+        if self.fresh_bytez:
+            warnings.warn("Buffer contains (probably) data which is not in the cache, it will be overwritten",
+                          RuntimeWarning)
+
         data = self.cache.get_as_dict()
         bytez = self.block_definition.to_bytes(data)
         self.vulkan_buffer.map(bytez)
-        self.cache_in_sync = True
+        self.fresh_cache = False
+        self.fresh_bytez = False
 
     def fetch(self):
-        if not self.cache_in_sync:
-            warnings.warn("Cache of cpu buffer contains unmapped data, it will be overwritten", RuntimeWarning)
+        if self.fresh_cache:
+            warnings.warn("Cache contains data which is not in the buffer, it will by overwritten", RuntimeWarning)
 
         with self.vulkan_buffer.mapped() as bytebuffer:
             bytez = bytebuffer[:]
         data = self.block_definition.from_bytes(bytez)
         self.cache.set_from_dict(data)
-        self.cache_in_sync = True
+        self.fresh_cache = False
+        self.fresh_bytez = False
 
 
 class BufferGPU(Buffer):
@@ -179,8 +190,8 @@ class StagedBuffer(BufferInterface):
         super(StagedBuffer, self).__init__(session, block_definition, block_usage)
         self.buffer_cpu = BufferCPU(session, block_definition, block_usage, sync_mode)
         self.buffer_gpu = BufferGPU(session, block_definition, block_usage)
-        self.buffers_in_sync = True
         self.sync_mode = sync_mode
+        self.fresh_bytez = False
 
     @classmethod
     def from_shader(cls, session, shader, binding):
@@ -192,36 +203,37 @@ class StagedBuffer(BufferInterface):
         return self.buffer_gpu.get_vulkan_buffer()
 
     def before_stage(self, stage, binding, access_modifier):
-        if access_modifier in [Access.READ_ONLY, Access.READ_WRITE] and not self.buffers_in_sync:
-            self.flush()
-        if access_modifier in [Access.WRITE_ONLY, Access.READ_WRITE]:
-            self.buffers_in_sync = False
+        if access_modifier in [Access.READ_ONLY, Access.READ_WRITE]:
+            if self.sync_mode is self.SYNC_LAZY and self.buffer_cpu.fresh_cache:
+                self.flush()
 
     def after_stage(self, stage, binding, access_modifier):
-        if access_modifier in [Access.WRITE_ONLY, Access.READ_WRITE] and self.sync_mode == self.SYNC_EAGER:
-            self.fetch()
+        if access_modifier in [Access.WRITE_ONLY, Access.READ_WRITE]:
+            self.fresh_bytez = True
+            if self.sync_mode is self.SYNC_EAGER:
+                self.fetch()
 
     def __getitem__(self, key):
-        if not self.buffers_in_sync:
+        if self.fresh_bytez:
             self.fetch()
         return self.buffer_cpu[key]
 
     def __setitem__(self, key, value):
         self.buffer_cpu[key] = value
-        self.buffers_in_sync = False
 
-        if self.sync_mode == self.SYNC_EAGER:
+        if self.sync_mode is self.SYNC_EAGER:
             self.flush()
 
     def is_synced(self):
-        return self.buffers_in_sync
+        return not self.fresh_bytez and self.buffer_cpu.is_synced()
 
     def flush(self):
-        self.buffer_cpu.flush()
+        if self.buffer_cpu.fresh_cache:
+            self.buffer_cpu.flush()
         self.buffer_cpu.copy_to(self.buffer_gpu)
-        self.buffers_in_sync = True
+        self.fresh_bytez = False
 
     def fetch(self):
         self.buffer_gpu.copy_to(self.buffer_cpu)
         self.buffer_cpu.fetch()
-        self.buffers_in_sync = True
+        self.fresh_bytez = False

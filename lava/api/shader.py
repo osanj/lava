@@ -24,11 +24,7 @@ class Shader(object):
         self.byte_code = ByteCode(self.bytez)
 
         # placeholder for inspection variables
-        self.definitions_scalar = None
-        self.definitions_vector = None
-        self.definitions_matrix = None
-        self.definitions_array = None
-        self.definitions_struct = None
+        self.definitions_block = None
         self.block_data = None
 
         # check / set entry point
@@ -76,39 +72,42 @@ class Shader(object):
 
     def inspect(self):
         self.block_data = self.byte_code.find_blocks()
+        self.definitions_block = {}
 
-        self.definitions_scalar = {index: Scalar.of(dtype) for index, dtype in self.byte_code.types_scalar.items()}
-        self.definitions_vector = {index: Vector(n, dtype) for index, (dtype, n) in self.byte_code.types_vector.items()}
-        self.definitions_array = {}
-        self.definitions_struct = {}
+        defs_scalar = {index: Scalar.of(dtype) for index, dtype in self.byte_code.types_scalar.items()}
+        defs_vector = {index: Vector(n, dtype) for index, (dtype, n) in self.byte_code.types_vector.items()}
+        defs_array = {}
+        defs_struct = {}
 
         for binding in self.get_bindings():
-            self.build_definition(self.get_block_index(binding)[0])
+            index, _ = self.get_block_index(binding)
+            self.deduce_definition(index, defs_scalar, defs_vector, defs_array, defs_struct, index)
+            self.definitions_block[index] = defs_struct[index]
             self.deduce_layout(binding)
 
-    def build_definition(self, index):
+    def deduce_definition(self, index, definitions_scalar, definitions_vector, definitions_array, definitions_struct,
+                          last_struct=None):
         default_layout = Layout.STD140
-        default_order = Order.COLUMN_MAJOR
 
         if index in self.byte_code.types_array:
             type_index, dims = self.byte_code.types_array[index]
 
             # build missing definition
-            if type_index in self.byte_code.types_struct and type_index not in self.definitions_struct:
-                self.build_definition(type_index)
+            if type_index in self.byte_code.types_struct and type_index not in definitions_struct:
+                self.deduce_definition(type_index, definitions_scalar, definitions_vector, definitions_array,
+                                       definitions_struct, last_struct)
 
             definition = None
 
             # matrix types are shared, but still affected by the layout, create a instance for every occurrence
             if type_index in self.byte_code.types_matrix:
-                dtype, rows, cols = self.byte_code.types_matrix[type_index]
-                definition = Matrix(cols, rows, dtype, default_layout, default_order)
+                definition = self.build_matrix_definition(type_index, default_layout, last_struct)
 
-            definition = definition or self.definitions_scalar.get(type_index, None)
-            definition = definition or self.definitions_vector.get(type_index, None)
-            definition = definition or self.definitions_struct.get(type_index, None)
+            definition = definition or definitions_scalar.get(type_index)
+            definition = definition or definitions_vector.get(type_index)
+            definition = definition or definitions_struct.get(type_index)
 
-            self.definitions_array[index] = Array(definition, dims, default_layout)
+            definitions_array[index] = Array(definition.copy(), dims, default_layout)
 
         elif index in self.byte_code.types_struct:
             member_indices = self.byte_code.types_struct[index]
@@ -118,11 +117,18 @@ class Shader(object):
                 is_struct = member_index in self.byte_code.types_struct
                 is_array = member_index in self.byte_code.types_array
 
-                if is_struct and member_index not in self.definitions_struct:
-                    self.build_definition(member_index)
+                defs = {
+                    "definitions_scalar": definitions_scalar,
+                    "definitions_vector": definitions_vector,
+                    "definitions_array": definitions_array,
+                    "definitions_struct": definitions_struct
+                }
 
-                if is_array and member_index not in self.definitions_array:
-                    self.build_definition(member_index)
+                if is_struct and member_index not in definitions_struct:
+                    self.deduce_definition(member_index, last_struct=member_index, **defs)
+
+                if is_array and member_index not in definitions_array:
+                    self.deduce_definition(member_index, last_struct=index, **defs)
 
             definitions = []
             for member_index in member_indices:
@@ -130,44 +136,77 @@ class Shader(object):
 
                 # matrix types are shared, but still affected by the layout, create a instance for every occurrence
                 if member_index in self.byte_code.types_matrix:
-                    dtype, rows, cols = self.byte_code.types_matrix[member_index]
-                    definition = Matrix(cols, rows, dtype, default_layout, default_order)
+                    definition = self.build_matrix_definition(member_index, default_layout, last_struct)
 
-                definition = definition or self.definitions_scalar.get(member_index, None)
-                definition = definition or self.definitions_vector.get(member_index, None)
-                definition = definition or self.definitions_array.get(member_index, None)
-                definition = definition or self.definitions_struct.get(member_index, None)
-                definitions.append(definition)
+                definition = definition or definitions_scalar.get(member_index)
+                definition = definition or definitions_vector.get(member_index)
+                definition = definition or definitions_array.get(member_index)
+                definition = definition or definitions_struct.get(member_index)
+                definitions.append(definition.copy())
 
             struct_name, member_names = self.byte_code.find_names(index)
-            self.definitions_struct[index] = Struct(definitions, default_layout, member_names=member_names,
-                                                    type_name=struct_name)
+            definitions_struct[index] = Struct(definitions, default_layout, member_names=member_names,
+                                               type_name=struct_name)
 
         else:
             raise RuntimeError("Unexpected parsing error")
 
+    def build_matrix_definition(self, matrix_index, layout, last_struct_index):
+        # we assume that matrices always have the order decoration in bytecode (if they are part of a interface block)
+        if last_struct_index is None:
+            raise RuntimeError("Unexpected parsing error")
+
+        member_indices = self.byte_code.find_member_ids(last_struct_index)
+        member_orders = self.byte_code.find_orders(last_struct_index)
+
+        # matrix is direct member of the last struct
+        if matrix_index in member_indices:
+            member = member_indices.index(matrix_index)
+
+        # if the matrix is a member of an array which is a struct member, the array is also decorated with the
+        # matrix order
+        else:
+            member = None
+
+            for index in member_indices:
+                if index in self.byte_code.types_array:
+                    type_index, _ = self.byte_code.types_array[index]
+                    if type_index == matrix_index:
+                        member = member_indices.index(index)
+                        break
+
+            if member is None:
+                raise RuntimeError("Unexpected parsing error")
+
+        order_decoration = member_orders[member]
+        order = {Decoration.ROW_MAJOR: Order.ROW_MAJOR, Decoration.COL_MAJOR: Order.COLUMN_MAJOR}[order_decoration]
+
+        dtype, rows, cols = self.byte_code.types_matrix[matrix_index]
+        return Matrix(cols, rows, dtype, layout, order)
+
     def deduce_layout(self, binding):
         index, usage = self.get_block_index(binding)
+        definition = self.get_block_definition(binding)
 
-        self.set_layout(index, Layout.STD140)
+        definition.layout = Layout.STD140
         match_std140 = self.check_layout(index)
 
-        self.set_layout(index, Layout.STD430)
+        definition.layout = Layout.STD430
         match_std430 = self.check_layout(index)
 
         # deduce layout
         if match_std140 and not match_std430:
-            self.set_layout(index, Layout.STD140)
+            definition.layout = Layout.STD140
 
         elif not match_std140 and match_std430:
-            self.set_layout(index, Layout.STD430)
+            definition.layout = Layout.STD430
 
         elif match_std140 and match_std430:
             # std430 is not allowed for uniform buffer objects
             if usage == BufferUsage.UNIFORM_BUFFER:
-                self.set_layout(index, Layout.STD140)
+                definition.layout = Layout.STD140
             else:
-                self.set_layout(index, Layout.STDXXX)
+                definition.layout = Layout.STDXXX
 
         else:
             possible_reasons = [
@@ -180,7 +219,7 @@ class Shader(object):
                                "".join(["* {}\n".format(reason) for reason in possible_reasons]))
 
     def check_layout(self, index):
-        definition = self.definitions_struct[index]
+        definition = self.definitions_block[index]
 
         member_indices = self.byte_code.find_member_ids(index)
         offsets_bytecode = self.byte_code.find_offsets(index)
@@ -202,53 +241,6 @@ class Shader(object):
                     return False
 
         return True
-
-    def set_layout(self, index, layout, order=None):
-        def map_order(_order):
-            if _order is None:
-                raise ValueError("Order is empty")
-            if _order == Decoration.ROW_MAJOR:
-                return Order.ROW_MAJOR
-            if _order == Decoration.COL_MAJOR:
-                return Order.COLUMN_MAJOR
-            raise ValueError("Unknown order '{}'".format(order))
-
-        if index in self.definitions_struct:
-            member_indices = self.byte_code.types_struct[index]
-            member_orders = self.byte_code.find_orders(index)
-
-            for i, member_index in enumerate(member_indices):
-                if member_index in self.byte_code.types_matrix:
-                    self.definitions_struct[index].definitions[i].layout = layout
-                    self.definitions_struct[index].definitions[i].order = map_order(member_orders[i])
-
-                if member_index in self.byte_code.types_array:
-                    # only structs are decorated, arrays are only decorated as a member of an array
-                    # therefore the order needs to be forwarded in the case of arrays of matrices
-                    if isinstance(self.definitions_array[member_index].definition, Matrix):
-                        self.set_layout(member_index, layout, map_order(member_orders[i]))
-                    else:
-                        self.set_layout(member_index, layout)
-
-                if member_index in self.byte_code.types_struct:
-                    self.set_layout(member_index, layout)
-
-            self.definitions_struct[index].layout = layout  # set after setting children!
-
-        elif index in self.definitions_array:
-            type_index, _ = self.byte_code.types_array[index]
-
-            if type_index in self.byte_code.types_matrix:
-                self.definitions_array[index].definition.layout = layout
-                self.definitions_array[index].definition.order = order
-
-            if type_index in self.byte_code.types_struct:
-                self.set_layout(type_index, layout)
-
-            self.definitions_array[index].layout = layout  # set after setting children!
-
-        else:
-            raise RuntimeError()
 
     def get_bindings(self):
         bindings = []
@@ -276,7 +268,7 @@ class Shader(object):
 
     def get_block(self, binding):
         index, usage = self.get_block_index(binding)
-        return self.definitions_struct[index], usage
+        return self.definitions_block[index], usage
 
     def get_block_definition(self, binding):
         return self.get_block(binding)[0]

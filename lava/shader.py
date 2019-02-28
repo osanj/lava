@@ -8,6 +8,8 @@ from lava.api.constants.vk import BufferUsage
 from lava.api.pipeline import ShaderOperation, Pipeline
 from lava.api.shader import Shader as _Shader
 
+__all__ = ["Shader", "Stage"]
+
 
 class Shader(object):
 
@@ -43,7 +45,7 @@ class Stage(object):
         memory_object_binding = self.check_block_definitions()
 
         self.pipeline = Pipeline(self.session.device, shader.vulkan_shader, memory_object_binding)
-        self.executor = ShaderOperation(self.session.device, self.pipeline, self.session.queue_index)
+        self.operation = ShaderOperation(self.session.device, self.pipeline, self.session.queue_index)
 
     def check_workgroups(self):
         physical_device = self.session.device.physical_device
@@ -102,35 +104,22 @@ class Stage(object):
             raise RuntimeError(msg)
 
         wait_events = [stage.executor.event for stage in after_stages]
-        self.executor.record(x, y, z, wait_events)
+        self.operation.record(x, y, z, wait_events)
 
     def run(self):
-        t00 = time.time()
-
         for binding, buffer in self.bindings.iteritems():
             access_modifier = self.shader.get_block_access(binding)
             buffer.before_stage(self, binding, access_modifier)
 
-        print "prestage", time.time() - t00
-        self.t0 = time.time()
-        self.executor.run()
+        self.operation.run()
 
     def wait(self):
-        self.executor.wait()
-        t1 = time.time()
-        print "stage", t1 - self.t0
+        self.operation.wait()
 
         for binding, buffer in self.bindings.iteritems():
             access_modifier = self.shader.get_block_access(binding)
             buffer.after_stage(self, binding, access_modifier)
 
-        t11 = time.time()
-        print "poststage",  t11 - t1
-
     def run_and_wait(self):
         self.run()
         self.wait()
-
-
-
-

@@ -23,6 +23,9 @@ class ByteRepresentation(object):
     def __init__(self):
         pass
 
+    def copy(self):
+        raise NotImplementedError()
+
     def size(self):
         raise NotImplementedError()
 
@@ -33,8 +36,8 @@ class ByteRepresentation(object):
     def __str__(self, indent=2):
         raise NotImplementedError()
 
-    def glsl(self, var_name):
-        return "{} {};".format(self.glsl_dtype(), var_name)
+    # def glsl(self, var_name):
+    #     return "{} {};".format(self.glsl_dtype(), var_name)
 
     def glsl_dtype(self):
         raise NotImplementedError()
@@ -123,6 +126,9 @@ class Scalar(ByteRepresentation):
         if dtype == DataType.DOUBLE:
             return ScalarDouble()
         raise RuntimeError("Unknown scalar type '{}'".format(dtype))
+
+    def copy(self):
+        return self.__class__()
 
     def alignment(self):
         # "A scalar of size N has a base alignment of N."
@@ -296,6 +302,9 @@ class Vector(ByteRepresentation):
     def dvec4(cls):
         return Vector(4, DataType.DOUBLE)
 
+    def copy(self):
+        return Vector(self.n, self.dtype)
+
     def size(self):
         return self.scalar.size() * self.n
 
@@ -389,6 +398,9 @@ class Matrix(ByteRepresentation):
             if self.layout == Layout.STD140:
                 self.a += (16 - self.a % 16) % 16
 
+    def copy(self):
+        return Matrix(self.cols, self.rows, self.dtype, self.layout, self.order)
+
     def size(self):
         return self.step_size() * self.vector_count
 
@@ -477,6 +489,11 @@ class Array(ByteRepresentation):
     @layout.setter
     def layout(self, layout):
         self._layout = layout
+
+        # set children first
+        if isinstance(self.definition, (Matrix, Struct)):
+            self.definition.layout = layout
+
         self.a = None
         self.precompute_alignment()
 
@@ -489,6 +506,9 @@ class Array(ByteRepresentation):
 
     def shape(self):
         return self.dims
+
+    def copy(self):
+        return Array(self.definition.copy(), self.dims, self.layout)
 
     def size(self):
         return self.step_size() * np.product(self.shape())
@@ -701,6 +721,9 @@ class Struct(ByteRepresentation):
         self.type_name = type_name
         self.layout = layout  # precomputes alignment
 
+        if len(set(definitions)) != len(definitions):
+            raise RuntimeError("For struct members a definition object can not be used more than once")
+
     @property
     def layout(self):
         return self._layout
@@ -708,6 +731,12 @@ class Struct(ByteRepresentation):
     @layout.setter
     def layout(self, layout):
         self._layout = layout
+
+        # set children first
+        for definition in self.definitions:
+            if isinstance(definition, (Array, Matrix, Struct)):
+                definition.layout = layout
+
         self.a = None
         self.precompute_alignment()
 
@@ -717,6 +746,9 @@ class Struct(ByteRepresentation):
 
             if self.layout == Layout.STD140:
                 self.a += (16 - self.a % 16) % 16
+
+    def copy(self):
+        return Struct([d.copy() for d in self.definitions], self.layout, self.member_names, self.type_name)
 
     def size(self):
         return self.steps()[-1]
