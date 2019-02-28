@@ -73,19 +73,23 @@ class Stage(object):
                 raise RuntimeError("Shader does not define binding {}".format(binding))
 
             usage_shader = self.shader.get_block_usage(binding)
-            usage_buffer = self.shader.get_block_usage(binding)
+            usage_buffer = buffer.get_block_usage()
 
             if usage_buffer != usage_shader:
                 raise RuntimeError("Shader defines binding {} as {}, but got {}".format(
                     binding, usage_shader, usage_buffer))
 
             definition_shader = self.shader.get_block_definition(binding)
-            definition_buffer = self.shader.get_block_definition(binding)
+            definition_buffer = buffer.get_block_definition()
 
             try:
                 definition_shader.compare(definition_buffer, quiet=False)
             except RuntimeError as e:
-                raise e  # TODO: add message
+                msg = "Block definition mismatch of buffer and shader at binding {}".format(binding)
+                args = list(e.args)
+                args[0] = msg + "\n" + e.args[0]
+                e.args = tuple(args)
+                raise e
 
             if usage_buffer == BufferUsage.UNIFORM_BUFFER:
                 if definition_buffer.size() > max_uniform_size:
