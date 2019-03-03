@@ -15,6 +15,8 @@ class Session(object):
 
     def __init__(self, physical_device, queue_index=None):
         self.instance = lava.instance()  # validation level might has been changed
+        if physical_device not in lava.devices():
+            raise RuntimeError("Provided invalid / outdated device object")
         self.queue_index = queue_index or physical_device.get_queue_indices(QueueType.COMPUTE)[0]
         self.device = Device(physical_device, [(QueueType.COMPUTE, self.queue_index)],
                              validation_lvl=lava.VALIDATION_LEVEL)
