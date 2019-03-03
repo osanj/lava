@@ -11,8 +11,7 @@ from lava.api.memory import Memory
 
 class PhysicalDevice(object):
 
-    def __init__(self, instance, handle):
-        self.instance = instance
+    def __init__(self, handle):
         self.handle = handle
 
         # meta data
@@ -55,7 +54,7 @@ class PhysicalDevice(object):
 
     @classmethod
     def all(cls, instance):
-        return [cls(instance, handle) for handle in vk.vkEnumeratePhysicalDevices(instance.handle)]
+        return [cls(handle) for handle in vk.vkEnumeratePhysicalDevices(instance.handle)]
 
     def __str__(self):
         return "\n".join(["{}: {}".format(key, self.__dict__[key]) for key in sorted(self.__dict__)])

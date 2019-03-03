@@ -5,11 +5,13 @@ import os
 import platform
 import subprocess
 
+from lava import ENV_VAR_SDK
+
 logger = logging.getLogger(__name__)
 
+__all__ = ["compile_glsl"]
 
 EXT_SPIR_V = ".spv"
-ENV_SDK_NAME_LINUX = "VULKAN_SDK"
 
 
 def compile_glsl(path, verbose=True):
@@ -17,8 +19,8 @@ def compile_glsl(path, verbose=True):
 
     # Linux
     if platform.system() == "Linux":
-        if ENV_SDK_NAME_LINUX not in os.environ:
-            raise RuntimeError("Could not find environment variable {}".format(ENV_SDK_NAME_LINUX))
+        if ENV_VAR_SDK not in os.environ:
+            raise RuntimeError("Could not find environment variable {}".format(ENV_VAR_SDK))
 
         path_compiler = os.path.join(os.environ["VULKAN_SDK"], "bin", "glslangValidator")
         cmd = [path_compiler, "-V", path, "-o", path_output]

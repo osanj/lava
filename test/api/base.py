@@ -8,14 +8,13 @@ import unittest
 
 import numpy as np
 
+import lava as lv
 from lava.api.bytes import Array, Matrix, Vector, Scalar, Struct
-from lava.api.constants.spirv import DataType, Layout, Order
+from lava.api.constants.spirv import Layout
 from lava.api.constants.vk import BufferUsage, MemoryType
 from lava.api.memory import Buffer
 from lava.api.pipeline import ShaderOperation, Pipeline
 from lava.api.shader import Shader
-from lava.session import Session
-from lava.util import compile_glsl
 
 from test import TestUtil
 
@@ -33,8 +32,7 @@ class GlslBasedTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         logging.basicConfig(level=logging.DEBUG)
-        TestUtil.set_vulkan_environment_variables()
-        cls.SESSION = Session.discover()  # TestSession() ?
+        cls.SESSION = lv.Session(lv.devices()[0])
         cls.MEMORY = {}
 
     @classmethod
@@ -46,7 +44,7 @@ class GlslBasedTest(unittest.TestCase):
     @classmethod
     def shader_from_txt(cls, txt, verbose=True, clean_up=True):
         path_shader = TestUtil.write_to_temp_file(txt, suffix=".comp")
-        shader_path_spirv = compile_glsl(path_shader, verbose)
+        shader_path_spirv = lv.compile_glsl(path_shader, verbose)
         shader = Shader(cls.SESSION.device, shader_path_spirv)
         if clean_up:
             os.remove(path_shader)
