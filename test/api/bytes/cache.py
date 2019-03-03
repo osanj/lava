@@ -2,6 +2,7 @@
 
 import logging
 import pprint
+import unittest
 
 import numpy as np
 
@@ -16,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 class TestByteCache(GlslBasedTest):
 
+    @unittest.skip("test for development purposes")
     def test_manually(self):
         # byte cache test
         buffer_usage = BufferUsage.STORAGE_BUFFER
