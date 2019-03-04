@@ -48,9 +48,9 @@ class Shader(object):
         if entry_point is None:
             if len(entry_points_detected) > 1:
                 raise RuntimeError("Multiple entry points found {}".format(", ".join(entry_points_detected.values())))
-            entry_point = entry_points_detected.values()[0]
+            entry_point = list(entry_points_detected.values())[0]
 
-        for index_candidate, entry_point_candidate in entry_points_detected.iteritems():
+        for index_candidate, entry_point_candidate in entry_points_detected.items():
             if entry_point_candidate == entry_point:
                 index = index_candidate
 
@@ -290,7 +290,7 @@ class Shader(object):
 
         accesses = set()
 
-        for member, d in decorations.iteritems():
+        for member, d in decorations.items():
             if Decoration.NON_WRITABLE in d and Decoration.NON_READABLE not in d:
                 accesses.add(Access.READ_ONLY)
             elif Decoration.NON_WRITABLE not in d and Decoration.NON_READABLE in d:

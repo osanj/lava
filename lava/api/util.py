@@ -1,5 +1,6 @@
 # -*- coding: UTF-8 -*-
 
+from functools import reduce
 import logging
 import operator
 
@@ -30,7 +31,7 @@ class Debugger(object):
         if flags & vk.VK_DEBUG_REPORT_ERROR_BIT_EXT:
             lvl = logging.ERROR
 
-        logger.log(lvl, message[::].decode())
+        logger.log(lvl, message[::])
         return 0
 
     def attach(self):
@@ -46,7 +47,7 @@ class Debugger(object):
         self.handle = self.instance.vkCreateDebugReportCallbackEXT(self.instance.handle, create_info, None)
 
     def detach(self):
-        self.instance.vkDestroyDebugReportCAllbackEXT(self.instance.handle, self.handle)
+        self.instance.vkDestroyDebugReportCallbackEXT(self.instance.handle, self.handle)
 
 
 class Event(object):

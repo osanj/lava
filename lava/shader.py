@@ -68,7 +68,7 @@ class Stage(object):
         bindings_shader = self.shader.get_bindings()
         max_uniform_size = self.session.device.physical_device.get_maximum_uniform_size()
 
-        for binding, buffer in self.bindings.iteritems():
+        for binding, buffer in self.bindings.items():
             if binding not in bindings_shader:
                 raise RuntimeError("Shader does not define binding {}".format(binding))
 
@@ -111,7 +111,7 @@ class Stage(object):
         self.operation.record(x, y, z, wait_events)
 
     def run(self):
-        for binding, buffer in self.bindings.iteritems():
+        for binding, buffer in self.bindings.items():
             access_modifier = self.shader.get_block_access(binding)
             buffer.before_stage(self, binding, access_modifier)
 
@@ -120,7 +120,7 @@ class Stage(object):
     def wait(self):
         self.operation.wait()
 
-        for binding, buffer in self.bindings.iteritems():
+        for binding, buffer in self.bindings.items():
             access_modifier = self.shader.get_block_access(binding)
             buffer.after_stage(self, binding, access_modifier)
 

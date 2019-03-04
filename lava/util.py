@@ -30,6 +30,7 @@ def compile_glsl(path, verbose=True):
         else:
             dev_null = open(os.devnull, "w")
             result = subprocess.call(cmd, stdout=dev_null, stderr=subprocess.STDOUT)
+            dev_null.close()
 
         if result != 0:
             raise RuntimeError("Could not compile shader {}, try yourself with\n{}".format(path, " ".join(cmd)))

@@ -109,7 +109,7 @@ class Device(object):
         self.memories = []
         queue_create_infos = []
 
-        for queue_idx in set(map(lambda (_, q_idx): q_idx, queue_definitions)):
+        for queue_idx in set(map(lambda type_and_idx: type_and_idx[1], queue_definitions)):
             queue_create_infos.append(vk.VkDeviceQueueCreateInfo(
                 queueFamilyIndex=queue_idx,
                 queueCount=1,

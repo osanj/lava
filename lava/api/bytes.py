@@ -590,8 +590,8 @@ class Array(ByteRepresentation):
             return array.flatten().tobytes()
 
         else:
-            p = (self.a - self.definition.alignment()) / self.definition.size()
-            a = self.a / self.definition.size()
+            p = (self.a - self.definition.alignment()) // self.definition.size()
+            a = self.a // self.definition.size()
 
             array_padded = np.zeros(a * np.product(array.shape), dtype=array.dtype)
             mask = (np.arange(len(array_padded)) % a) < (a - p)
@@ -610,8 +610,8 @@ class Array(ByteRepresentation):
         if tuple(array.shape) != shape:
             raise RuntimeError("Array has shape {}, expected {}".format(array.shape, shape))
 
-        p = (self.a - self.definition.size()) / self.definition.scalar.size()
-        a = self.a / self.definition.scalar.size()
+        p = (self.a - self.definition.size()) // self.definition.scalar.size()
+        a = self.a // self.definition.scalar.size()
 
         array_padded = np.zeros(a * np.product(shape[:-1]), dtype=array.dtype)
         mask = (np.arange(len(array_padded)) % a) < (a - p)
@@ -635,8 +635,8 @@ class Array(ByteRepresentation):
             array = np.swapaxes(array, -2, -1)
             shape = array.shape
 
-        p = (self.a - self.definition.vector.size()) / self.definition.vector.scalar.size()
-        a = self.a / self.definition.vector.scalar.size()
+        p = (self.a - self.definition.vector.size()) // self.definition.vector.scalar.size()
+        a = self.a // self.definition.vector.scalar.size()
 
         array_padded = np.zeros(a * np.product(shape[:-1]), dtype=array.dtype)
         mask = (np.arange(len(array_padded)) % a) < (a - p)
@@ -676,8 +676,8 @@ class Array(ByteRepresentation):
             array_flat = np.frombuffer(bytez, dtype=self.definition.numpy_dtype())
 
         else:
-            p = (self.a - self.definition.alignment()) / self.definition.size()
-            a = self.a / self.definition.size()
+            p = (self.a - self.definition.alignment()) // self.definition.size()
+            a = self.a // self.definition.size()
 
             array_padded = np.frombuffer(bytez, dtype=self.definition.numpy_dtype())
             mask = (np.arange(a * np.product(self.shape())) % a) < (a - p)
@@ -687,8 +687,8 @@ class Array(ByteRepresentation):
 
     def from_bytes_for_vectors(self, bytez):
         shape = tuple(list(self.shape()) + [self.definition.length()])
-        p = (self.a - self.definition.size()) / self.definition.scalar.size()
-        a = self.a / self.definition.scalar.size()
+        p = (self.a - self.definition.size()) // self.definition.scalar.size()
+        a = self.a // self.definition.scalar.size()
 
         array_padded = np.frombuffer(bytez, dtype=self.definition.scalar.numpy_dtype())
         mask = (np.arange(a * np.product(shape[:-1])) % a) < (a - p)
@@ -696,8 +696,8 @@ class Array(ByteRepresentation):
 
     def from_bytes_for_matrices(self, bytez):
         shape = tuple(list(self.shape()) + list(self.definition.shape()))
-        p = (self.a - self.definition.vector.size()) / self.definition.vector.scalar.size()
-        a = self.a / self.definition.vector.scalar.size()
+        p = (self.a - self.definition.vector.size()) // self.definition.vector.scalar.size()
+        a = self.a // self.definition.vector.scalar.size()
 
         if self.definition.order == Order.COLUMN_MAJOR:
             shape = tuple(list(shape[:-2]) + [shape[-1], shape[-2]])

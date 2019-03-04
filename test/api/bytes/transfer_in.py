@@ -58,8 +58,8 @@ class TestCpuToShader(GlslBasedTest):
         equal = (diff == 0).all()
         if not equal:
             np.set_printoptions(precision=3, suppress=True)
-            print "{}\n".format(glsl)
-            print "{}\nexpected\n{}\nactual\n{}\ndiff\n{}\n".format(container, array_expected, array, diff)
+            print("{}\n".format(glsl))
+            print("{}\nexpected\n{}\nactual\n{}\ndiff\n{}\n".format(container, array_expected, array, diff))
         self.assertTrue(equal)
 
     @unittest.skip("test for development purposes")
@@ -88,10 +88,10 @@ class TestCpuToShader(GlslBasedTest):
         ]
 
         container = Struct(variables, buffer_layout, type_name="block")
-        print container
+        print(container)
 
         glsl = self.build_glsl_program(container, structs, buffer_usage)
-        # print glsl
+        # print(glsl)
 
         values, array_expected = self.build_values(container.definitions)
         array_expected = np.array(array_expected, dtype=np.float32)
@@ -100,9 +100,9 @@ class TestCpuToShader(GlslBasedTest):
         bytez_output = self.run_program(glsl, bytez_input, array_expected.nbytes, usage_input=buffer_usage)
         array = np.frombuffer(bytez_output, dtype=array_expected.dtype)
 
-        print array_expected
-        print array
-        print "equal", ((array_expected - array) == 0).all()
+        print(array_expected)
+        print(array)
+        print("equal", ((array_expected - array) == 0).all())
 
     def test_scalars_and_vectors(self):
         rng = np.random.RandomState(123)

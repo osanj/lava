@@ -18,7 +18,7 @@ class Pipeline(object):
         self.descriptor_pool_handle = None
         bindings = []
 
-        for i, memory_obj in memory_objects.iteritems():
+        for i, memory_obj in memory_objects.items():
             bindings.append(memory_obj.descriptor_set_layout(i))
 
         descriptor_layout_create_info = vk.VkDescriptorSetLayoutCreateInfo(flags=None, pBindings=bindings)
@@ -27,7 +27,7 @@ class Pipeline(object):
 
         shader_stage_create_info = vk.VkPipelineShaderStageCreateInfo(stage=vk.VK_SHADER_STAGE_COMPUTE_BIT,
                                                                       module=shader.handle,
-                                                                      pName=shader.get_entry_point())
+                                                                      pName=shader.get_entry_point().encode("ascii"))
 
         if len(push_constants) > 0:
             if len(push_constants) > 1:
@@ -59,11 +59,11 @@ class Pipeline(object):
         pool_sizes = []
         descriptor_types = {DescriptorType.UNIFORM_BUFFER: 0, DescriptorType.STORAGE_BUFFER: 0}
 
-        for memory_obj in self.memory_objects.itervalues():
+        for memory_obj in self.memory_objects.values():
             descriptor_type = memory_obj.descriptor_type()
             descriptor_types[descriptor_type] += 1
 
-        for descriptor_type, count in descriptor_types.iteritems():
+        for descriptor_type, count in descriptor_types.items():
             if count > 0:
                 pool_sizes.append(vk.VkDescriptorPoolSize(DescriptorType.to_vulkan(descriptor_type), count))
 
@@ -78,7 +78,7 @@ class Pipeline(object):
     def update_descriptor_sets(self):
         write_data = []
 
-        for i, memory_obj in self.memory_objects.iteritems():
+        for i, memory_obj in self.memory_objects.items():
             write_data.append(memory_obj.write_descriptor_set(self.descriptor_set_handle, i))
 
         vk.vkUpdateDescriptorSets(self.device.handle, len(write_data), write_data, 0, None)

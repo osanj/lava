@@ -42,15 +42,15 @@ class TestByteCache(GlslBasedTest):
 
         cache = ByteCache(container)
 
-        print ""
-        print ""
+        print("")
+        print("")
         pprint.pprint(cache.values)
-        print cache[-1][0][0]["a"]
-        print ""
-        print ""
+        print(cache[-1][0][0]["a"])
+        print("")
+        print("")
         pprint.pprint(cache)
-        print cache[-1][0][0]
-        print ""
-        print ""
+        print(cache[-1][0][0])
+        print("")
+        print("")
         pprint.pprint(cache.get_as_dict())
 

@@ -67,10 +67,10 @@ class TestShaderToCpu(GlslBasedTest):
         equal = values_ftd == values_expected_ftd
         if not equal:
             np.set_printoptions(precision=3, suppress=True)
-            print "{}".format(glsl)
-            print "\nexepected"
+            print("{}".format(glsl))
+            print("\nexepected")
             self.print_formatted_values(values_expected_ftd)
-            print "\nactual"
+            print("\nactual")
             self.print_formatted_values(values_ftd)
 
         self.assertTrue(equal)
@@ -101,10 +101,10 @@ class TestShaderToCpu(GlslBasedTest):
         ]
 
         container = Struct(variables, buffer_layout, type_name="block")
-        print container
+        print(container)
 
         glsl = self.build_glsl_program(container, structs, buffer_usage)
-        # print glsl
+        # print(glsl)
 
         values_expected, array = self.build_values(container.definitions)
         array = np.array(array, dtype=np.float32)
@@ -122,15 +122,15 @@ class TestShaderToCpu(GlslBasedTest):
         values_ftd = self.format_values(container, values, register)
         values_expected_ftd = self.format_values(container, values_expected, register)
 
-        print ""
+        print("")
         self.print_formatted_values(values_ftd)
-        print ""
+        print("")
         self.print_formatted_values(values_expected_ftd)
-        print ""
+        print("")
 
-        print ""
+        print("")
 
-        print values_ftd == values_expected_ftd
+        print(values_ftd == values_expected_ftd)
 
     def test_scalars_and_vectors(self):
         rng = np.random.RandomState(123)

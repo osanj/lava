@@ -102,36 +102,36 @@ class TestByteCodeInspection(GlslBasedTest):
 
         shader.inspect()
 
-        print shader.byte_code
+        print(shader.byte_code)
 
-        print ""
-        print "scalars"
-        print shader.byte_code.types_scalar
-        print ""
-        print "vectors"
-        print shader.byte_code.types_vector
-        print ""
-        print "matrices"
-        print shader.byte_code.types_matrix
-        print ""
-        print "array"
-        print shader.byte_code.types_array
-        print ""
-        print "struct"
-        print shader.byte_code.types_struct
-        print ""
-        print "names"
+        print("")
+        print("scalars")
+        print(shader.byte_code.types_scalar)
+        print("")
+        print("vectors")
+        print(shader.byte_code.types_vector)
+        print("")
+        print("matrices")
+        print(shader.byte_code.types_matrix)
+        print("")
+        print("array")
+        print(shader.byte_code.types_array)
+        print("")
+        print("struct")
+        print(shader.byte_code.types_struct)
+        print("")
+        print("names")
         names = []
         for idx in shader.byte_code.types_struct:
             struct_name, member_names = shader.byte_code.find_names(idx)
             offsets = shader.byte_code.find_offsets(idx)
             names.append("  {}) {} {{ {} }}".format(idx, struct_name, ", ".join(
                 ["{}({})".format(mname, offsets.get(i)) for i, mname in enumerate(member_names)])))
-        print "\n".join(names)
-        print ""
-        print "blocks"
-        print shader.byte_code.find_blocks()
-        print ""
+        print("\n".join(names))
+        print("")
+        print("blocks")
+        print(shader.byte_code.find_blocks())
+        print("")
 
     def test_detection_type_nested_with_structs(self):
         rng = np.random.RandomState(321)

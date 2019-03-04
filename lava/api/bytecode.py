@@ -39,7 +39,7 @@ class ByteCode(object):
     def read_words(cls, bytez, n=-1, offset=0):
         # words to unsigned integers
         if n == -1:
-            n = len(bytez) / spirv.WORD_BYTE_SIZE - offset
+            n = len(bytez) // spirv.WORD_BYTE_SIZE - offset
         a = offset * spirv.WORD_BYTE_SIZE
         b = a + n * spirv.WORD_BYTE_SIZE
         return struct.unpack("I" * n, bytez[a:b])
@@ -48,7 +48,7 @@ class ByteCode(object):
     def read_words_as_string(cls, bytez, n=-1, offset=0):
         a = offset * spirv.WORD_BYTE_SIZE
         b = len(bytez) if n == -1 else a + n * spirv.WORD_BYTE_SIZE
-        return str(bytez[a:b].rstrip("\0"))
+        return bytez[a:b].rstrip(b"\0").decode("utf-8")
 
     def __str__(self):
         strings = []
@@ -73,7 +73,7 @@ class ByteCode(object):
         for instruction in results:
             matches = 0
 
-            for attr_key, attr_value in attributes.iteritems():
+            for attr_key, attr_value in attributes.items():
                 if attr_key not in instruction.op.__dict__:
                     break
                 if instruction.op.__dict__[attr_key] != attr_value:
@@ -420,7 +420,7 @@ class OpMemberDecorate(Op):
         self.type_id = ByteCode.read_word(bytez)
         self.member = ByteCode.read_word(bytez, offset=1)
         self.decoration = spirv.Decoration.from_spirv(ByteCode.read_word(bytez, offset=2))
-        self.literals = ByteCode.read_words(bytez, n=(len(bytez) / spirv.WORD_BYTE_SIZE - 3), offset=3)
+        self.literals = ByteCode.read_words(bytez, n=(len(bytez) // spirv.WORD_BYTE_SIZE - 3), offset=3)
 
     def describe(self):
         return "type_id={} member={} decoration={} literals={}".format(self.type_id, self.member, self.decoration,

@@ -28,7 +28,7 @@ class VulkanEnum(object):
 
     @classmethod
     def keys(cls):
-        return zip(*cls._MAP)[0]
+        return list(zip(*cls._MAP))[0]
 
 
 class DeviceType(VulkanEnum):
