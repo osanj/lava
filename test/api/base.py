@@ -16,7 +16,7 @@ from lava.api.memory import Buffer
 from lava.api.pipeline import ShaderOperation, Pipeline
 from lava.api.shader import Shader
 
-from test import TestUtil
+from test.util import write_to_temp_file
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ class GlslBasedTest(unittest.TestCase):
 
     @classmethod
     def shader_from_txt(cls, txt, verbose=True, clean_up=True):
-        path_shader = TestUtil.write_to_temp_file(txt, suffix=".comp")
+        path_shader = write_to_temp_file(txt, suffix=".comp")
         shader_path_spirv = lv.compile_glsl(path_shader, verbose)
         shader = Shader(cls.SESSION.device, shader_path_spirv)
         if clean_up:

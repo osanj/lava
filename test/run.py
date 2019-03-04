@@ -1,7 +1,7 @@
 # -*- coding: UTF-8 -*-
 
-import unittest
 import os
+import unittest
 
 
 if __name__ == "__main__":
