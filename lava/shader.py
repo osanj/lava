@@ -16,6 +16,9 @@ class Shader(object):
         self.vulkan_shader = _Shader(self.session.device, path, entry_point)
         self.vulkan_shader.inspect()
 
+    def __del__(self):
+        del self.vulkan_shader
+
     def get_bindings(self):
         return self.vulkan_shader.get_bindings()
 

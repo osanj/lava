@@ -47,7 +47,7 @@ class Debugger(object):
         self.handle = self.instance.vkCreateDebugReportCallbackEXT(self.instance.handle, create_info, None)
 
     def detach(self):
-        self.instance.vkDestroyDebugReportCallbackEXT(self.instance.handle, self.handle)
+        self.instance.vkDestroyDebugReportCallbackEXT(self.instance.handle, self.handle, None)
 
 
 class Event(object):

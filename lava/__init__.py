@@ -6,6 +6,8 @@ import os
 import warnings
 
 
+__version__ = "0.1.0"
+
 ENV_VAR_SDK = "VULKAN_SDK"
 ENV_VAR_LAYER_PATH = "VK_LAYER_PATH"
 
