@@ -1,6 +1,5 @@
 # -*- coding: UTF-8 -*-
 
-import logging
 import warnings
 
 from lava.api.bytes import ByteCache, Struct
@@ -20,6 +19,7 @@ class BufferInterface(object):
     SYNC_EAGER = "eager"
     SYNC_LAZY = "lazy"
     SYNC_MANUAL = "manual"
+    SYNC_DEFAULT = SYNC_LAZY
 
     def __init__(self, session, block_definition, block_usage):
         if not isinstance(block_definition, Struct):
@@ -102,7 +102,7 @@ class Buffer(BufferInterface):
 
 class BufferCPU(Buffer):
 
-    def __init__(self, session, block_definition, block_usage, sync_mode=BufferInterface.SYNC_LAZY):
+    def __init__(self, session, block_definition, block_usage, sync_mode=BufferInterface.SYNC_DEFAULT):
         super(BufferCPU, self).__init__(session, block_definition, block_usage, Buffer.LOCATION_CPU)
         self.cache = ByteCache(self.block_definition)
         self.sync_mode = sync_mode
@@ -110,10 +110,10 @@ class BufferCPU(Buffer):
         self.fresh_bytez = False
 
     @classmethod
-    def from_shader(cls, session, shader, binding):
+    def from_shader(cls, session, shader, binding, sync_mode=BufferInterface.SYNC_DEFAULT):
         block_definition = shader.get_block_definition(binding)
         block_usage = shader.get_block_usage(binding)
-        return cls(session, block_definition, block_usage)
+        return cls(session, block_definition, block_usage, sync_mode)
 
     def before_stage(self, stage, binding, access_modifier):
         if access_modifier in [Access.READ_ONLY, Access.READ_WRITE]:
@@ -186,7 +186,7 @@ class BufferGPU(Buffer):
 
 class StagedBuffer(BufferInterface):
 
-    def __init__(self, session, block_definition, block_usage, sync_mode=BufferInterface.SYNC_LAZY):
+    def __init__(self, session, block_definition, block_usage, sync_mode=BufferInterface.SYNC_DEFAULT):
         super(StagedBuffer, self).__init__(session, block_definition, block_usage)
         self.buffer_cpu = BufferCPU(session, block_definition, block_usage, sync_mode)
         self.buffer_gpu = BufferGPU(session, block_definition, block_usage)
@@ -194,10 +194,10 @@ class StagedBuffer(BufferInterface):
         self.fresh_bytez = False
 
     @classmethod
-    def from_shader(cls, session, shader, binding):
+    def from_shader(cls, session, shader, binding, sync_mode=BufferInterface.SYNC_DEFAULT):
         block_definition = shader.get_block_definition(binding)
         block_usage = shader.get_block_usage(binding)
-        return cls(session, block_definition, block_usage)
+        return cls(session, block_definition, block_usage, sync_mode)
 
     def get_vulkan_buffer(self):
         return self.buffer_gpu.get_vulkan_buffer()

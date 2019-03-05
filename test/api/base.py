@@ -32,6 +32,7 @@ class GlslBasedTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         logging.basicConfig(level=logging.DEBUG)
+        # lv.VALIDATION_LEVEL = lv.VALIDATION_LEVEL_DEBUG
         cls.SESSION = lv.Session(lv.devices()[0])
         cls.MEMORY = {}
 

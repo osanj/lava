@@ -1,7 +1,5 @@
 # -*- coding: UTF-8 -*-
 
-import logging
-import time
 import warnings
 
 from lava.api.constants.vk import BufferUsage
@@ -127,3 +125,14 @@ class Stage(object):
     def run_and_wait(self):
         self.run()
         self.wait()
+
+
+# class Flow(object):
+#
+#     def __init__(self, session):
+#         pass
+
+# buffers either have
+#   unlimited reads
+# or
+#   one write and unlimited reads afterwards
