@@ -1,7 +1,6 @@
 # -*- coding: UTF-8 -*-
 
 import itertools
-import logging
 import os
 import unittest
 
@@ -13,14 +12,8 @@ from lava.api.constants.spirv import Layout
 
 from test.util import write_to_temp_file
 
-logger = logging.getLogger(__name__)
-
 
 class BufferTest(unittest.TestCase):
-
-    @classmethod
-    def setUpClass(cls):
-        logging.basicConfig()
 
     def setUp(self):
         super(BufferTest, self).setUp()

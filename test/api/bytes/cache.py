@@ -1,6 +1,5 @@
 # -*- coding: UTF-8 -*-
 
-import logging
 import pprint
 import unittest
 
@@ -11,8 +10,6 @@ from lava.api.constants.spirv import Layout, Order
 from lava.api.constants.vk import BufferUsage
 
 from test.api.base import GlslBasedTest
-
-logger = logging.getLogger(__name__)
 
 
 class TestByteCache(GlslBasedTest):

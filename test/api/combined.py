@@ -1,7 +1,6 @@
 # -*- coding: UTF-8 -*-
 
 import itertools
-import logging
 import unittest
 
 import numpy as np
@@ -10,8 +9,6 @@ from lava.api.bytes import ByteCache, Matrix, Scalar, Struct, Vector
 from lava.api.constants.spirv import DataType, Layout, Order
 
 from test.api.base import GlslBasedTest
-
-logger = logging.getLogger(__name__)
 
 
 class CombinedTest(GlslBasedTest):

@@ -1,7 +1,5 @@
 # -*- coding: UTF-8 -*-
 
-import logging
-
 import vulkan as vk
 
 from lava.api.bytecode import ByteCode
@@ -9,8 +7,6 @@ from lava.api.bytes import Array, Matrix, Scalar, Struct, Vector
 from lava.api.constants.spirv import Access, Decoration, ExecutionMode, ExecutionModel, Layout, Order, StorageClass
 from lava.api.constants.vk import BufferUsage
 from lava.api.util import Destroyable
-
-logger = logging.getLogger(__name__)
 
 
 class Shader(Destroyable):

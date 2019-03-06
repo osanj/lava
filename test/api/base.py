@@ -1,7 +1,6 @@
 # -*- coding: UTF-8 -*-
 
 import itertools
-import logging
 import os
 import pprint
 import unittest
@@ -18,8 +17,6 @@ from lava.api.shader import Shader
 
 from test.util import write_to_temp_file
 
-logger = logging.getLogger(__name__)
-
 
 class GlslBasedTest(unittest.TestCase):
 
@@ -31,14 +28,13 @@ class GlslBasedTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        logging.basicConfig(level=logging.DEBUG)
         # lv.VALIDATION_LEVEL = lv.VALIDATION_LEVEL_DEBUG
         cls.SESSION = lv.Session(lv.devices()[0])
         cls.MEMORY = {}
 
     @classmethod
     def tearDownClass(cls):
-        cls.SESSION.destroy
+        cls.SESSION.destroy()
 
     # Util
 

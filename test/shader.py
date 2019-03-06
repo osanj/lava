@@ -1,6 +1,5 @@
 # -*- coding: UTF-8 -*-
 
-import logging
 import os
 import unittest
 
@@ -12,14 +11,8 @@ from lava.api.constants.spirv import Layout
 
 from test.util import write_to_temp_file
 
-logger = logging.getLogger(__name__)
-
 
 class ShaderTest(unittest.TestCase):
-
-    @classmethod
-    def setUpClass(cls):
-        logging.basicConfig()
 
     def setUp(self):
         super(ShaderTest, self).setUp()

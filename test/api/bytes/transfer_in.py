@@ -1,7 +1,6 @@
 # -*- coding: UTF-8 -*-
 
 import itertools
-import logging
 import unittest
 
 import numpy as np
@@ -11,8 +10,6 @@ from lava.api.constants.spirv import DataType, Layout, Order
 from lava.api.constants.vk import BufferUsage
 
 from test.api.base import GlslBasedTest, Random
-
-logger = logging.getLogger(__name__)
 
 
 class TestCpuToShader(GlslBasedTest):

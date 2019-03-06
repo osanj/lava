@@ -1,12 +1,9 @@
 # -*- coding: UTF-8 -*-
 
 import itertools
-import logging
 import struct
 
 import lava.api.constants.spirv as spirv
-
-logger = logging.getLogger(__name__)
 
 
 class ByteCode(object):
