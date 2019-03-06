@@ -5,8 +5,11 @@ import logging
 import os
 import warnings
 
+from future.utils import raise_with_traceback
+
 
 __version__ = "0.1.0"
+
 
 ENV_VAR_SDK = "VULKAN_SDK"
 ENV_VAR_LAYER_PATH = "VK_LAYER_PATH"
@@ -32,9 +35,9 @@ __devices = []
 
 
 def __initialize():
-    from lava.api.constants.vk import QueueType
-    from lava.api.device import PhysicalDevice
-    from lava.api.instance import Instance
+    from .api.constants.vk import QueueType
+    from .api.device import PhysicalDevice
+    from .api.instance import Instance
     global __instance, __instance_usages, __devices, VALIDATION_LEVEL
 
     try:
@@ -49,12 +52,8 @@ def __initialize():
         if len(__devices) == 0:
             warnings.warn("Did not find any suitable device", RuntimeWarning)
 
-        del QueueType, PhysicalDevice, Instance
-
     except:
-        return False
-    else:
-        return True
+        raise_with_traceback(ImportError("Could not initialize {}".format(__name__)))
 
 
 def instance():
@@ -66,8 +65,7 @@ def instance():
             warnings.warn("Recreating Vulkan instance with new validation level, any previously created sessions, "
                           "devices, etc. will be no longer usable", UserWarning)
 
-        del __devices
-        del __instance
+        __cleanup()
         __initialize()
 
     __instance_usages += 1
@@ -82,14 +80,19 @@ def devices():
 @atexit.register
 def __cleanup():
     global __instance, __devices
-    del __devices
-    del __instance
+
+    if __instance is not None:
+        from .session import sessions
+        for sess in sessions:
+            sess.destroy()
+
+        del __devices
+        __instance.destroy()
 
 
-if not __initialize():
-    raise ImportError("Could not initialize {}".format(__name__))
+__initialize()
 
-from lava.buffer import *
-from lava.session import *
-from lava.shader import *
-from lava.util import *
+from .buffer import *
+from .session import *
+from .shader import *
+from .util import *

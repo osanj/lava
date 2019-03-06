@@ -28,7 +28,7 @@ class BufferTest(unittest.TestCase):
 
     def tearDown(self):
         super(BufferTest, self).tearDown()
-        del self.session
+        self.session.destroy()
 
     def shader_from_txt(self, txt, verbose=True, clean_up=True):
         path_shader = write_to_temp_file(txt, suffix=".comp")

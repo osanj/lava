@@ -6,18 +6,35 @@ import operator
 
 import vulkan as vk
 
-logger = logging.getLogger(__name__)
+
+class Destroyable(object):
+
+    def __init__(self):
+        self.__destroyed = False
+
+    def __del__(self):
+        if not self.__destroyed:
+            self.destroy()
+
+    def destroy(self):
+        if not self.__destroyed:
+            self._destroy()
+            self.__destroyed = True
+
+    def _destroy(self):
+        raise NotImplementedError()
 
 
-class Debugger(object):
+class Debugger(Destroyable):
 
     def __init__(self, instance, lvl=logging.INFO):
+        super(Debugger, self).__init__()
         self.instance = instance
         self.lvl = lvl
         self.handle = None
         self.attach()
 
-    def __del__(self):
+    def _destroy(self):
         self.detach()
 
     @staticmethod
@@ -31,7 +48,7 @@ class Debugger(object):
         if flags & vk.VK_DEBUG_REPORT_ERROR_BIT_EXT:
             lvl = logging.ERROR
 
-        logger.log(lvl, message[::])
+        print("[VULKAN] " + message[::])
         return 0
 
     def attach(self):
@@ -50,19 +67,21 @@ class Debugger(object):
         self.instance.vkDestroyDebugReportCallbackEXT(self.instance.handle, self.handle, None)
 
 
-class Event(object):
+class Event(Destroyable):
 
     def __init__(self, device):
+        super(Event, self).__init__()
         self.device = device
         self.handle = vk.vkCreateEvent(self.device.handle, vk.VkEventCreateInfo(), None)
 
-    def __del__(self):
+    def _destroy(self):
         vk.vkDestroyEvent(self.device.handle, self.handle, None)
 
 
-class Fence(object):
+class Fence(Destroyable):
 
     def __init__(self, device, signalled):
+        super(Fence, self).__init__()
         self.device = device
 
         if signalled:
@@ -72,5 +91,5 @@ class Fence(object):
 
         self.handle = vk.vkCreateFence(self.device.handle, create_info, None)
 
-    def __del__(self):
+    def _destroy(self):
         vk.vkDestroyFence(self.device.handle, self.handle, None)

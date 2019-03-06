@@ -7,11 +7,12 @@ from lava.api.constants.spirv import Access
 from lava.api.constants.vk import BufferUsage, MemoryType
 from lava.api.memory import Buffer as _Buffer
 from lava.api.pipeline import CopyOperation
+from lava.api.util import Destroyable
 
 __all__ = ["BufferCPU", "BufferGPU", "StagedBuffer"]
 
 
-class BufferInterface(object):
+class BufferInterface(Destroyable):
 
     USAGE_STORAGE = BufferUsage.STORAGE_BUFFER
     USAGE_UNIFORM = BufferUsage.UNIFORM_BUFFER
@@ -22,11 +23,15 @@ class BufferInterface(object):
     SYNC_DEFAULT = SYNC_LAZY
 
     def __init__(self, session, block_definition, block_usage):
+        super(BufferInterface, self).__init__()
         if not isinstance(block_definition, Struct):
             raise RuntimeError("Block definitions must be structs")
         self.session = session
         self.block_definition = block_definition
         self.block_usage = block_usage
+
+    def _destroy(self):
+        raise NotImplementedError()
 
     def size(self):
         return self.block_definition.size()
@@ -71,11 +76,12 @@ class Buffer(BufferInterface):
         self.vulkan_memory = None
         self.session.register_buffer(self)
         self.allocate()
-        self.copy_cmd = CopyOperation(self.session.device, self.session.queue_index)
+        self.copy_operation = CopyOperation(self.session.device, self.session.queue_index)
 
-    def __del__(self):
-        del self.vulkan_memory
-        del self.vulkan_buffer
+    def _destroy(self):
+        self.vulkan_memory.destroy()
+        self.vulkan_buffer.destroy()
+        self.copy_operation.destroy()
 
     def allocate(self):
         if self.vulkan_buffer is not None:
@@ -96,8 +102,8 @@ class Buffer(BufferInterface):
         return self.location
 
     def copy_to(self, other):
-        self.copy_cmd.record(self.vulkan_buffer, other.vulkan_buffer)
-        self.copy_cmd.run_and_wait()
+        self.copy_operation.record(self.vulkan_buffer, other.vulkan_buffer)
+        self.copy_operation.run_and_wait()
 
 
 class BufferCPU(Buffer):
@@ -192,6 +198,10 @@ class StagedBuffer(BufferInterface):
         self.buffer_gpu = BufferGPU(session, block_definition, block_usage)
         self.sync_mode = sync_mode
         self.fresh_bytez = False
+
+    def _destroy(self):
+        self.buffer_cpu.destroy()
+        self.buffer_gpu.destroy()
 
     @classmethod
     def from_shader(cls, session, shader, binding, sync_mode=BufferInterface.SYNC_DEFAULT):

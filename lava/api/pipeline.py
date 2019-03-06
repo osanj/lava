@@ -5,12 +5,13 @@ import ctypes
 import vulkan as vk
 
 from lava.api.constants.vk import DescriptorType, QueueType, TIMEOUT_FOREVER
-from lava.api.util import Event, Fence
+from lava.api.util import Destroyable, Event, Fence
 
 
-class Pipeline(object):
+class Pipeline(Destroyable):
 
     def __init__(self, device, shader, memory_objects, push_constants=()):
+        super(Pipeline, self).__init__()
         self.device = device
         self.shader = shader
         self.memory_objects = memory_objects
@@ -48,7 +49,7 @@ class Pipeline(object):
 
         self.handle = vk.vkCreateComputePipelines(self.device.handle, None, 1, [pipeline_create_info], None)
 
-    def __del__(self):
+    def _destroy(self):
         if self.descriptor_pool_handle is not None:
             vk.vkDestroyDescriptorPool(self.device.handle, self.descriptor_pool_handle, None)
         vk.vkDestroyDescriptorSetLayout(self.device.handle, self.descriptor_set_layout_handle, None)
@@ -95,9 +96,10 @@ class Pipeline(object):
         return self.pipeline_layout_handle
 
 
-class ShaderOperation(object):
+class ShaderOperation(Destroyable):
 
     def __init__(self, device, pipeline, queue_index):
+        super(ShaderOperation, self).__init__()
         self.device = device
         self.pipeline = pipeline
         self.queue_index = queue_index
@@ -116,10 +118,10 @@ class ShaderOperation(object):
                                                        level=vk.VK_COMMAND_BUFFER_LEVEL_PRIMARY, commandBufferCount=1)
         self.command_buffer_handle = vk.vkAllocateCommandBuffers(self.device.handle, allocate_info)[0]
 
-    def __del__(self):
+    def _destroy(self):
         vk.vkDestroyCommandPool(self.device.handle, self.command_pool_handle, None)
-        del self.event
-        del self.fence
+        self.event.destroy()
+        self.fence.destroy()
 
     def record(self, count_x, count_y, count_z, wait_events=()):
         vk.vkBeginCommandBuffer(self.command_buffer_handle,
@@ -166,9 +168,10 @@ class ShaderOperation(object):
         self.wait()
 
 
-class CopyOperation(object):
+class CopyOperation(Destroyable):
 
     def __init__(self, device, queue_index):
+        super(CopyOperation, self).__init__()
         self.device = device
         self.queue_index = queue_index
         self.fence = Fence(self.device, signalled=False)
@@ -180,6 +183,10 @@ class CopyOperation(object):
         allocation_info = vk.VkCommandBufferAllocateInfo(commandPool=self.command_pool_handle, commandBufferCount=1,
                                                          level=vk.VK_COMMAND_BUFFER_LEVEL_PRIMARY)
         self.command_buffer_handle = vk.vkAllocateCommandBuffers(self.device.handle, allocation_info)[0]
+
+    def _destroy(self):
+        vk.vkDestroyCommandPool(self.device.handle, self.command_pool_handle, None)
+        self.fence.destroy()
 
     def record(self, src_buffer, dst_buffer):
         vk.vkBeginCommandBuffer(self.command_buffer_handle,

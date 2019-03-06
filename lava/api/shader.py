@@ -8,13 +8,15 @@ from lava.api.bytecode import ByteCode
 from lava.api.bytes import Array, Matrix, Scalar, Struct, Vector
 from lava.api.constants.spirv import Access, Decoration, ExecutionMode, ExecutionModel, Layout, Order, StorageClass
 from lava.api.constants.vk import BufferUsage
+from lava.api.util import Destroyable
 
 logger = logging.getLogger(__name__)
 
 
-class Shader(object):
+class Shader(Destroyable):
 
     def __init__(self, device, path, entry_point=None):
+        super(Shader, self).__init__()
         self.device = device
         with open(path, "rb") as f:
             self.bytez = f.read()
@@ -31,7 +33,7 @@ class Shader(object):
         self.entry_point, self.entry_point_index = self.check_entry_point(entry_point)
         self.local_size = self.check_local_size(self.entry_point_index)
 
-    def __del__(self):
+    def _destroy(self):
         vk.vkDestroyShaderModule(self.device.handle, self.handle, None)
 
     def check_entry_point(self, entry_point):

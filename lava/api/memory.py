@@ -5,11 +5,13 @@ import contextlib
 import vulkan as vk
 
 from lava.api.constants.vk import BufferUsage, DescriptorType
+from lava.api.util import Destroyable
 
 
-class Memory(object):
+class Memory(Destroyable):
 
     def __init__(self, device, memory_type_index, size):
+        super(Memory, self).__init__()
         self.device = device
         self.memory_type_index = memory_type_index
         self.size = size
@@ -29,7 +31,7 @@ class Memory(object):
 
         # VK_ERROR_INVALID_EXTERNAL_HANDLE
 
-    def __del__(self):
+    def _destroy(self):
         vk.vkFreeMemory(self.device.handle, self.handle, None)
 
     def get_size(self):
@@ -51,13 +53,17 @@ class Memory(object):
         vk.vkUnmapMemory(self.device.handle, self.handle)
 
 
-class MemoryObject(object):
+class MemoryObject(Destroyable):
 
     def __init__(self, device, size):
+        super(MemoryObject, self).__init__()
         self.device = device
         self.size = size
         self.memory = None
         self.memory_offset = None
+
+    def _destroy(self):
+        raise NotImplementedError()
 
     def get_memory(self):
         return self.memory
@@ -99,7 +105,7 @@ class Buffer(MemoryObject):
 
         self.handle = vk.vkCreateBuffer(self.device.handle, create_info, None)
 
-    def __del__(self):
+    def _destroy(self):
         vk.vkDestroyBuffer(self.device.handle, self.handle, None)
 
     def get_memory_requirements(self):

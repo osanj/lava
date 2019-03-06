@@ -38,7 +38,7 @@ class GlslBasedTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        del cls.SESSION
+        cls.SESSION.destroy
 
     # Util
 
@@ -64,8 +64,8 @@ class GlslBasedTest(unittest.TestCase):
     @classmethod
     def destroy_buffer(cls, buf):
         buf, mem = cls.MEMORY[buf]
-        del buf
-        del mem
+        buf.destroy()
+        mem.destroy()
 
     @classmethod
     def run_program(cls, glsl, bytez_input, bytez_output_size, usage_input=BufferUsage.STORAGE_BUFFER,
@@ -92,8 +92,8 @@ class GlslBasedTest(unittest.TestCase):
         with buffer_out.mapped() as bytebuffer:
             bytez_output = bytebuffer[:]
 
-        del operation
-        del pipeline
+        operation.destroy()
+        pipeline.destroy()
         cls.destroy_buffer(buffer_in)
         cls.destroy_buffer(buffer_out)
 

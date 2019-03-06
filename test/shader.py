@@ -27,7 +27,7 @@ class ShaderTest(unittest.TestCase):
 
     def tearDown(self):
         super(ShaderTest, self).tearDown()
-        del self.session
+        self.session.destroy()
 
     def shader_from_txt(self, txt, verbose=True, clean_up=True):
         path_shader = write_to_temp_file(txt, suffix=".comp")
@@ -49,7 +49,6 @@ class ShaderTest(unittest.TestCase):
 
             void main() {}
             """
-
         shader = self.shader_from_txt(glsl)
         incompatible_definition = Struct([Array(ScalarFloat(), (721, 1281, 4), Layout.STD140)], Layout.STD140)
         incompatible_buffer = lv.BufferCPU(self.session, incompatible_definition, lv.BufferCPU.USAGE_STORAGE)
@@ -150,7 +149,7 @@ class ShaderTest(unittest.TestCase):
                     im_filtered_expected[i, j, k] = np.sum(
                         im_padded[i:i+2*padding+1, j:j+2*padding+1, k] * weights)
 
-        print(self.assertTrue(np.mean(np.abs(im_filtered - im_filtered_expected)) < 1e-3))
+        self.assertTrue(np.mean(np.abs(im_filtered - im_filtered_expected)) < 1e-3)
 
 
 if __name__ == "__main__":

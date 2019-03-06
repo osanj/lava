@@ -1,12 +1,12 @@
 # -*- coding: UTF-8 -*-
 
 import itertools
-import logging
 
 import vulkan as vk
 
 from lava.api.constants.vk import DeviceType, MemoryType, QueueType, VALIDATION_LAYERS
 from lava.api.memory import Memory
+from lava.api.util import Destroyable
 
 
 class PhysicalDevice(object):
@@ -101,9 +101,10 @@ class PhysicalDevice(object):
         return self.work_group_max_invocations
 
 
-class Device(object):
+class Device(Destroyable):
 
     def __init__(self, physical_device, queue_definitions, validation_lvl=None, extensions=()):
+        super(Device, self).__init__()
         self.validation_lvl = validation_lvl
         self.physical_device = physical_device
         self.memories = []
@@ -141,8 +142,9 @@ class Device(object):
             self.queue_handles[queue_type] = vk.vkGetDeviceQueue(self.handle, queue_idx, 0)
             self.queue_indices[queue_type] = queue_idx
 
-    def __del__(self):
-        del self.memories
+    def _destroy(self):
+        for memory in self.memories:
+            memory.destroy()
         vk.vkDestroyDevice(self.handle, None)  # does also destroy the queues
 
     def get_physical_device(self):

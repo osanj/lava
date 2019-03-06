@@ -2,22 +2,27 @@
 
 import warnings
 
+from future.utils import raise_with_traceback
+
 from lava.api.constants.vk import BufferUsage
 from lava.api.pipeline import ShaderOperation, Pipeline
 from lava.api.shader import Shader as _Shader
+from lava.api.util import Destroyable
 
 __all__ = ["Shader", "Stage"]
 
 
-class Shader(object):
+class Shader(Destroyable):
 
     def __init__(self, session, path, entry_point=None):
+        super(Shader, self).__init__()
         self.session = session
+        self.session.register_shader(self)
         self.vulkan_shader = _Shader(self.session.device, path, entry_point)
         self.vulkan_shader.inspect()
 
-    def __del__(self):
-        del self.vulkan_shader
+    def _destroy(self):
+        self.vulkan_shader.destroy()
 
     def get_bindings(self):
         return self.vulkan_shader.get_bindings()
@@ -35,18 +40,27 @@ class Shader(object):
         return self.vulkan_shader.get_block_access(binding)
 
 
-class Stage(object):
+class Stage(Destroyable):
 
     def __init__(self, shader, bindings):
+        super(Stage, self).__init__()
         self.session = shader.session
+        self.session.register_stage(self)
         self.shader = shader
         self.bindings = bindings
 
+        self.checked = False
         self.check_workgroups()
         memory_object_binding = self.check_block_definitions()
+        self.checked = True
 
         self.pipeline = Pipeline(self.session.device, shader.vulkan_shader, memory_object_binding)
         self.operation = ShaderOperation(self.session.device, self.pipeline, self.session.queue_index)
+
+    def _destroy(self):
+        if self.checked:
+            self.operation.destroy()
+            self.pipeline.destroy()
 
     def check_workgroups(self):
         physical_device = self.session.device.physical_device
@@ -87,10 +101,8 @@ class Stage(object):
                 definition_shader.compare(definition_buffer, quiet=False)
             except RuntimeError as e:
                 msg = "Block definition mismatch of buffer and shader at binding {}".format(binding)
-                args = list(e.args)
-                args[0] = msg + "\n" + e.args[0]
-                e.args = tuple(args)
-                raise e
+                msg += "\n" + e.args[0]
+                raise_with_traceback(RuntimeError(msg))
 
             if usage_buffer == BufferUsage.UNIFORM_BUFFER:
                 if definition_buffer.size() > max_uniform_size:

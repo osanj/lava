@@ -3,12 +3,13 @@
 import vulkan as vk
 
 from lava.api.constants.vk import VALIDATION_LAYERS
-from lava.api.util import Debugger
+from lava.api.util import Debugger, Destroyable
 
 
-class Instance(object):
+class Instance(Destroyable):
 
     def __init__(self, extensions=(), validation_lvl=None):
+        super(Instance, self).__init__()
         self.validation_lvl = validation_lvl
         extensions = list(extensions)
 
@@ -34,9 +35,9 @@ class Instance(object):
         self.handle = vk.vkCreateInstance(create_info, None)
         self.debugger = Debugger(self, lvl=validation_lvl) if validation_lvl else None
 
-    def __del__(self):
+    def _destroy(self):
         if self.debugger:
-            del self.debugger
+            self.debugger.destroy()
         vk.vkDestroyInstance(self.handle, None)
 
     def __getattr__(self, item):
