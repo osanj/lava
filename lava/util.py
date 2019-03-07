@@ -1,13 +1,10 @@
 # -*- coding: UTF-8 -*-
 
-import logging
 import os
 import platform
 import subprocess
 
 from lava import ENV_VAR_SDK
-
-logger = logging.getLogger(__name__)
 
 __all__ = ["compile_glsl"]
 
@@ -42,6 +39,4 @@ def compile_glsl(path, verbose=True):
     else:
         raise NotImplementedError()
 
-    if verbose:
-        logger.info("Compiled shader {}".format(path))
     return path_output

@@ -42,7 +42,7 @@ class ShaderTest(unittest.TestCase):
 
             void main() {}
             """
-        shader = self.shader_from_txt(glsl)
+        shader = self.shader_from_txt(glsl, verbose=False)
         incompatible_definition = Struct([Array(ScalarFloat(), (721, 1281, 4), Layout.STD140)], Layout.STD140)
         incompatible_buffer = lv.BufferCPU(self.session, incompatible_definition, lv.BufferCPU.USAGE_STORAGE)
         self.assertRaises(RuntimeError, lv.Stage, shader=shader, bindings={0: incompatible_buffer})
@@ -111,7 +111,7 @@ class ShaderTest(unittest.TestCase):
             }
             """
 
-        shader = self.shader_from_txt(glsl)
+        shader = self.shader_from_txt(glsl, verbose=False)
 
         buf_in = lv.StagedBuffer.from_shader(self.session, shader, binding=0)
         buf_weights = lv.StagedBuffer.from_shader(self.session, shader, binding=1)
