@@ -3,7 +3,7 @@
 dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" > /dev/null && pwd )"
 
 
-latest_tag=$(git describe --exact-match HEAD 2>&1)
+latest_tag=$(git tag -l --points-at HEAD 2>&1)
 version_in_code=$(grep '__version__' ${dir}/../lava/__init__.py | grep -oP '([0-9]+\.[0-9]+\.[0-9]+[a-zA-Z0-9-._]*)')
 
 # check versions
@@ -35,7 +35,7 @@ echo "Built wheel..."
 
 
 # publish on pypi
-if [ $1 = "--release" ]; then
+if [ "$1" = "--release" ]; then
     python3 -m twine upload dist/*
 else
     python3 -m twine upload --repository-url https://test.pypi.org/legacy/ dist/*

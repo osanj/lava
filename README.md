@@ -1,95 +1,111 @@
 # Lava
 
-A highlevel wrapper of Vulkan's compute API with numpy bridge.
+* [Installation](#installation)
+* [Features](#features)
+* [Example](#example)
 
-numpy + shaders = <3
 
-### To-Do List
-- [ ] memory alignment of (arbitrary) complex types
-  - [x] scalars
-    - [x] to shader
-    - [x] from shader
-  - [x] vectors
-    - [x] to shader
-    - [x] from shader
-  - [x] matrices
-    - [x] to shader
-    - [x] from shader
-  - [x] structures
-    - [x] to shader
-    - [x] from shader
-  - [x] multi-dimensional arrays
-    - [x] to shader
-    - [x] from shader
-  - [ ] dynamic length
-- [ ] ~~images / samplers~~ (not for now)
-- [ ] ~~push constants~~
-- [x] bytecode analysis
-  - [x] bindings
-  - [x] local groups (?)
-  - [x] misc (glsl version, entry point)
-  - [x] parse type tree
-- [ ] pipelines
-  - [ ] oneshot
-  - [ ] synchronization based on dependency graph
-  - [ ] manual / automatic dependency dependency graph
-  - [ ] gpu buffers/images (?)
-- [ ] highlevel interface
-  - [ ] session
-  - [ ] memory management (CPU / GPU, Buffer / Uniform / Image)
-- [ ] package
-  - [ ] pypi
-  - [ ] python3
+## Installation
 
-### Diary
+```
+pip install lava
+```
 
-* 30.01.2019
-  * ran into memory alignment issues with uniforms (matrix of type 2x2, 2x3, 2x4)
-  * less/no problems with buffers **and** std430 layout (not available for uniforms) 
-  * thinking about dropping support for uniforms (or just specific types?)
-  * when dropping uniforms the std430 layout could be enforced to be used everywhere (what about images?)
+The Vulkan SDK needs to be installed (correct environment variables), see the [LunarG guide](https://vulkan.lunarg.com/doc/view/1.1.85.0/linux/getting_started.html). As of now `lava` is only tested on Ubuntu 18.04 with Nvidia's 415 driver, Windows is currently not supported.
 
-* 01.02.2019
-  * found usable documentation and understood the alignment and offset situation after all
-  * works smoothly for scalars and vectors
-  * arrays are probably next
 
-* 02.02.2019
-  * when overwriting (assigning it a second time) the first value of a dynamic output array in a ssbo it resets the entire array to 0
-  * arrays for basic types (uint, int, float, double) is working (also special case with numpy array)
+## Features
 
-* 02.02.2019 (2)
-  * wrote basic SPIR-V decoder
-  * booleans seem to be stored as uints
-  * bytecode also contains the variable names (are optional by spec, but I guess the vulkan glsl compiler always includes them)
-  * basically all information from the bindings is stored in the bytecode (and can be used to check user input)
-  * only thing missing is the layout (std140, std430)
- 
-* 07.02.2019
-  * the bytecode contains offsets which can be used to check the offsets which are computed when transferring data to/from the gpu
-  * this way the layout specified by the user can be confirmed
-  * ideally the layout can be deduced at some point
+* automatic memory alignment and parsing of arbitrary complex block interfaces
+  * currently supported: scalars (int, uint, float, double), vectors, matrices, multidimensional arrays and structs
+  * currently not supported: bool and dynamic arrays
+  * further supported: ssbo's and ubo's, std140 and std430 layouts
+  * multidimensional arrays of scalars, vectors or matrices are expected and parsed as respective numpy arrays
+* cpu, gpu and staged buffers
+* intuitive shader execution
+  * block definitions are parsed from the compiled shader bytecode
+  * buffers are bound with a single line of code
+  * buffers and shaders are checked for compatibility, other sanity checks are performed
 
-* 15.02.2019
-  * found a new bug introduced by that struct padding
-  * apparently the padding is not necessary for arrays of structs? (see TestStructIn.test2)
-  * ~~almost everything is in place to generically test the bytes implementations exhaustively (just testing tons of combinations for peace of mind)~~
-  * iterating over multidimensional arrays is a reoccuring scheme, need to move that in a separete function/class/whatever
 
-* 17.02.2019
-  * I re-read the struct padding thingie and could resolve the bug
-  * when adding a wiki / tutorial later there needs to be a chapter on matrices (numpy style is matrix[row][col], glsl style is matrix[col][row])
-  * allowing to set the order for the matrix is not necessary as lava takes care about the alignment, I will try to force the user to use the default (COLUMN_MAJOR), proper integration would be annoying
-  * lava shaders should set layout and order "globally for a block"
+## Example
 
-* 20.02.2019
-  * my 1080 would take forever at vkCreateComputePipelines for shaders with large arrays (?)
-  * only related stuff I could find was https://www.gamedev.net/forums/topic/686518-extreme-long-compile-times-and-bad-performance-on-nvidia/
-  * I updated to nvidia's 415 driver (previously had 390) and now it works, phew
+Below is the `lava` version of [Erkaman's vulkan minimal compute](https://github.com/Erkaman/vulkan_minimal_compute):
 
-* 22.02.2019
-  * dropping push constants
-  * for flows to be usable each shader must declare readonly or writeonly access modifiers
-  * buffers can have one of the following behaviours
-    * unlimited read usages
-    * _one_ write usage and unlimited usages _afterwards_
+```python
+import cv2 as cv
+import lava as lv
+import numpy as np
+
+# start session on first device
+session = lv.Session(lv.devices()[0])
+
+# compile glsl code
+shader_path = "shader.comp"
+shader = lv.Shader(session, lv.compile_glsl(shader_path))
+
+# allocate buffer and take its definition from the shader (see glsl: float[HEIGHT][WIDTH][3] imageData)
+buffer_out = lv.StagedBuffer.from_shader(session, shader, binding=0)
+
+# compute minimum amount of work groups
+work_group_size = 32
+x = int(3200 / float(work_group_size) + 0.5)
+y = int(2400 / float(work_group_size) + 0.5)
+z = 1
+
+# bind buffer to binding 0 (see glsl: layout(std430, binding = 0) buffer buf)
+stage = lv.Stage(shader, {0: buffer_out})
+stage.record(x, y, z)
+stage.run_and_wait()
+
+# retrieve output as numpy array
+im = buffer_out["imageData"]
+
+cv.imwrite("mandelbrot.png", np.around(255 * im).astype(np.uint8))
+```
+
+```glsl
+#version 450
+#extension GL_ARB_separate_shader_objects : enable
+
+#define WIDTH 3200
+#define HEIGHT 2400
+#define WORKGROUP_SIZE 32
+layout ( local_size_x = WORKGROUP_SIZE, local_size_y = WORKGROUP_SIZE, local_size_z = 1 ) in;
+
+layout(std430, binding = 0) buffer buf {
+   float[HEIGHT][WIDTH][3] imageData;
+};
+
+void main() {
+  if(gl_GlobalInvocationID.x >= WIDTH || gl_GlobalInvocationID.y >= HEIGHT)
+    return;
+
+  float x = float(gl_GlobalInvocationID.x) / float(WIDTH);
+  float y = float(gl_GlobalInvocationID.y) / float(HEIGHT);
+
+  vec2 uv = vec2(x, y);
+  float n = 0.0;
+  vec2 c = vec2(-.445, 0.0) + (uv - 0.5) * (2.0 + 1.7 * 0.2),
+  z = vec2(0.0);
+  const int M = 128;
+  for (int i = 0; i < M; i++) {
+    z = vec2(z.x * z.x - z.y * z.y, 2. * z.x * z.y) + c;
+    if (dot(z, z) > 2) break;
+    n++;
+  }
+  
+  float t = float(n) / float(M);
+  vec3 d = vec3(0.3, 0.3 ,0.5);
+  vec3 e = vec3(-0.2, -0.3 ,-0.5);
+  vec3 f = vec3(2.1, 2.0, 3.0);
+  vec3 g = vec3(0.0, 0.1, 0.0);
+  vec3 color = d + e * cos( 6.28318 * (f * t + g) );
+
+  int xIndex = int(gl_GlobalInvocationID.x);
+  int yIndex = int(gl_GlobalInvocationID.y);
+  imageData[yIndex][xIndex][0] = color.r;
+  imageData[yIndex][xIndex][1] = color.g;
+  imageData[yIndex][xIndex][2] = color.b;
+}
+```
