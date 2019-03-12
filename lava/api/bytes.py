@@ -340,8 +340,11 @@ class Vector(ByteRepresentation):
         return True
 
     def to_bytes(self, array):
+        expected_types = (np.ndarray, list, tuple)
+        if not isinstance(array, expected_types):
+            raise RuntimeError("Got datatype {} for {} variable, expected {}".format(type(array), self.glsl_dtype(), expected_types))
         if len(array) != self.n:
-            raise RuntimeError("Array as length {}, expected {}".format(len(array), self.n))
+            raise RuntimeError("Got length {} for {} variable, expected {}".format(len(array), self.glsl_dtype(), self.n))
 
         bytez = bytearray()
 
@@ -431,6 +434,14 @@ class Matrix(ByteRepresentation):
         return True
 
     def to_bytes(self, array):
+        expected_types = (np.ndarray, list, tuple)
+        if not isinstance(array, expected_types) or isinstance(array[0], expected_types):
+            raise RuntimeError("Got datatype {} for {} variable, expected {}".format(type(array), self.glsl_dtype(), expected_types))
+        shape = (len(array), len(array[0]))
+        expected_shape = self.shape()
+        if shape != expected_shape:
+            raise RuntimeError("Got shape {} for {} variable, expected {}".format(len(array), self.glsl_dtype(), expected_shape))
+
         bytez = bytearray()
 
         if self.order == Order.COLUMN_MAJOR:
@@ -577,11 +588,11 @@ class Array(ByteRepresentation):
 
     def to_bytes_for_scalars(self, array):
         if not isinstance(array, np.ndarray):
-            raise RuntimeError("Incorrect datatype {}, expected {}".format(type(array), np.ndarray))
+            raise RuntimeError("Got datatype {} for {} variable, expected {}".format(type(array), self.glsl_dtype(), np.ndarray))
         if array.dtype != self.definition.numpy_dtype():
-            raise RuntimeError("Incorrect datatype {}, expected {}".format(array.dtype, self.definition.numpy_dtype()))
+            raise RuntimeError("Got datatype {} for {} variable, expected {}".format(array.dtype, self.glsl_dtype(), self.definition.numpy_dtype()))
         if tuple(array.shape) != self.shape():
-            raise RuntimeError("Array has shape {}, expected {}".format(array.shape, self.shape()))
+            raise RuntimeError("Got shape {} for {} variable, expected {}".format(array.shape, self.glsl_dtype(), self.shape()))
 
         if self.layout == Layout.STD430:
             return array.flatten().tobytes()
@@ -601,11 +612,11 @@ class Array(ByteRepresentation):
         shape = tuple(list(self.shape()) + [self.definition.length()])
 
         if not isinstance(array, np.ndarray):
-            raise RuntimeError("Incorrect datatype {}, expected {}".format(type(array), np.ndarray))
+            raise RuntimeError("Got datatype {} for {} variable, expected {}".format(type(array), self.glsl_dtype(), np.ndarray))
         if array.dtype != numpy_dtype:
-            raise RuntimeError("Incorrect datatype {}, expected {}".format(array.dtype, numpy_dtype))
+            raise RuntimeError("Got datatype {} for {} variable, expected {}".format(array.dtype, self.glsl_dtype(), numpy_dtype))
         if tuple(array.shape) != shape:
-            raise RuntimeError("Array has shape {}, expected {}".format(array.shape, shape))
+            raise RuntimeError("Got shape {} for {} variable, expected {}".format(array.shape, self.glsl_dtype(), shape))
 
         p = (self.a - self.definition.size()) // self.definition.scalar.size()
         a = self.a // self.definition.scalar.size()
@@ -621,11 +632,11 @@ class Array(ByteRepresentation):
         shape = tuple(list(self.shape()) + list(self.definition.shape()))
 
         if not isinstance(array, np.ndarray):
-            raise RuntimeError("Incorrect datatype {}, expected {}".format(type(array), np.ndarray))
+            raise RuntimeError("Got datatype {} for {} variable, expected {}".format(type(array), self.glsl_dtype(), np.ndarray))
         if array.dtype != numpy_dtype:
-            raise RuntimeError("Incorrect datatype {}, expected {}".format(array.dtype, numpy_dtype))
+            raise RuntimeError("Got datatype {} for {} variable, expected {}".format(array.dtype, self.glsl_dtype(), numpy_dtype))
         if tuple(array.shape) != shape:
-            raise RuntimeError("Array has shape {}, expected {}".format(array.shape, shape))
+            raise RuntimeError("Got shape {} for {} variable, expected {}".format(array.shape, self.glsl_dtype(), shape))
 
         # swap the last two dimensions if necessary
         if self.definition.order == Order.COLUMN_MAJOR:
