@@ -3,10 +3,10 @@
 dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" > /dev/null && pwd )"
 
 
+# check versions
 latest_tag=$(git tag -l --points-at HEAD 2>&1)
 version_in_code=$(grep '__version__' ${dir}/../lava/__init__.py | grep -oP '([0-9]+\.[0-9]+\.[0-9]+[a-zA-Z0-9-._]*)')
 
-# check versions
 if [ "$latest_tag" != "$version_in_code" ]; then
     echo "git tag \"$latest_tag\" does not match with version in source code \"$version_in_code\""
     exit 1
