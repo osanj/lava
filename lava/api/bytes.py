@@ -1,10 +1,9 @@
 # -*- coding: UTF-8 -*-
 
-import itertools
-
 import numpy as np
 
 from lava.api.constants.spirv import DataType, Layout, Order
+from lava.api.util import NdArray
 
 
 class ByteRepresentation(object):
@@ -435,7 +434,7 @@ class Matrix(ByteRepresentation):
 
     def to_bytes(self, array):
         expected_types = (np.ndarray, list, tuple)
-        if not isinstance(array, expected_types) or isinstance(array[0], expected_types):
+        if not (isinstance(array, expected_types) or isinstance(array[0], expected_types)):
             raise RuntimeError("Got datatype {} for {} variable, expected {}".format(type(array), self.glsl_dtype(), expected_types))
         shape = (len(array), len(array[0]))
         expected_shape = self.shape()
@@ -571,20 +570,12 @@ class Array(ByteRepresentation):
         else:
             bytez = bytearray()
 
-            for value in self.iterate_over_nd_array(values, self.shape()):
-                bytez += self.definition.to_bytes(value)
+            for indices in NdArray.iterate(self.shape()):
+                bytez += self.definition.to_bytes(NdArray.get(values, indices))
                 padding = (self.a - len(bytez) % self.a) % self.a
                 bytez += bytearray(padding)
 
             return bytez
-
-    @classmethod
-    def iterate_over_nd_array(cls, array, dims):
-        for indices in itertools.product(*[range(d) for d in dims]):
-            value = array
-            for idx in indices:
-                value = value[idx]
-            yield value
 
     def to_bytes_for_scalars(self, array):
         if not isinstance(array, np.ndarray):
@@ -667,13 +658,8 @@ class Array(ByteRepresentation):
             offset = 0
             size = self.definition.size()
 
-            for indices in itertools.product(*[range(s) for s in self.shape()]):
-                _data = values
-
-                for index in indices[:-1]:
-                    _data = _data[index]
-
-                _data[indices[-1]] = self.definition.from_bytes(bytez[offset:offset + size])
+            for indices in NdArray.iterate(self.shape()):
+                NdArray.assign(values, indices, self.definition.from_bytes(bytez[offset:offset + size]))
                 offset += size
                 offset += (self.a - offset % self.a) % self.a  # bytes
 
@@ -866,11 +852,8 @@ class ByteCache(object):
                 if isinstance(d.definition, Struct):
                     value = np.zeros(d.shape()).tolist()
 
-                    for indices in itertools.product(*[range(s) for s in d.shape()]):
-                        _data = value
-                        for index in indices[:-1]:
-                            _data = _data[index]
-                        _data[indices[-1]] = ByteCache(d.definition)
+                    for indices in NdArray.iterate(d.shape()):
+                        NdArray.assign(value, indices, ByteCache(d.definition))
 
             self.values[d] = value
 
@@ -887,15 +870,9 @@ class ByteCache(object):
                 if isinstance(d.definition, Struct):
                     value = np.zeros(d.shape()).tolist()
 
-                    for indices in itertools.product(*[range(s) for s in d.shape()]):
-                        _data1 = value
-                        _data2 = self.values[d]
-
-                        for index in indices[:-1]:
-                            _data1 = _data1[index]
-                            _data2 = _data2[index]
-
-                        _data1[indices[-1]] = _data2[indices[-1]].get_as_dict()
+                    for indices in NdArray.iterate(d.shape()):
+                        cache = NdArray.get(self.values[d], indices)
+                        NdArray.assign(value, indices, cache.get_as_dict())
 
             data[d] = value
 
@@ -907,15 +884,10 @@ class ByteCache(object):
                 self.values[d].set_from_dict(values[d])
 
             elif isinstance(d, Array) and isinstance(d.definition, Struct):
-                for indices in itertools.product(*[range(s) for s in d.shape()]):
-                    _value = values[d]
-                    _cache = self.values[d]
-
-                    for index in indices:
-                        _value = _value[index]
-                        _cache = _cache[index]
-
-                    _cache.set_from_dict(_value)
+                for indices in NdArray.iterate(d.shape()):
+                    value = NdArray.get(values[d], indices)
+                    cache = NdArray.get(self.values[d], indices)
+                    cache.set_from_dict(value)
 
             else:
                 self.values[d] = values[d]

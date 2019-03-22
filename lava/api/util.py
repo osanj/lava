@@ -1,6 +1,7 @@
 # -*- coding: UTF-8 -*-
 
 from functools import reduce
+import itertools
 import logging
 import operator
 
@@ -93,3 +94,28 @@ class Fence(Destroyable):
 
     def _destroy(self):
         vk.vkDestroyFence(self.device.handle, self.handle, None)
+
+
+class NdArray(object):
+
+    @classmethod
+    def iterate(cls, dims):
+        return itertools.product(*[range(d) for d in dims])
+
+    @classmethod
+    def assign(cls, nd_array, indices, value):
+        data = nd_array
+
+        for index in indices[:-1]:
+            data = data[index]
+
+        data[indices[-1]] = value
+
+    @classmethod
+    def get(cls, nd_array, indices):
+        data = nd_array
+
+        for index in indices:
+            data = data[index]
+
+        return data
