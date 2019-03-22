@@ -537,6 +537,13 @@ class Array(ByteRepresentation):
     def alignment(self):
         return self.a
 
+    @classmethod
+    def is_array_of_structs(cls, definition):
+        if isinstance(definition, Array):
+            if isinstance(definition.definition, Struct):
+                return True
+        return False
+
     def __str__(self, name=None, indent=2):
         s = self.definition.glsl_dtype()  # "array"
         s += ("[{}]" * len(self.shape())).format(*self.shape())
@@ -841,6 +848,7 @@ class ByteCache(object):
             raise RuntimeError("ByteCaches can only be initialized with struct definitions")
         self.definition = definition
         self.values = {}
+        self.dirty = False
 
         for i, d in enumerate(self.definition.definitions):
             value = None
@@ -848,12 +856,11 @@ class ByteCache(object):
             if isinstance(d, Struct):
                 value = ByteCache(d)
 
-            if isinstance(d, Array):
-                if isinstance(d.definition, Struct):
-                    value = np.zeros(d.shape()).tolist()
+            if Array.is_array_of_structs(d):
+                value = np.zeros(d.shape()).tolist()
 
-                    for indices in NdArray.iterate(d.shape()):
-                        NdArray.assign(value, indices, ByteCache(d.definition))
+                for indices in NdArray.iterate(d.shape()):
+                    NdArray.assign(value, indices, ByteCache(d.definition))
 
             self.values[d] = value
 
@@ -866,13 +873,12 @@ class ByteCache(object):
             if isinstance(d, Struct):
                 value = self.values[d].get_as_dict()
 
-            if isinstance(d, Array):
-                if isinstance(d.definition, Struct):
-                    value = np.zeros(d.shape()).tolist()
+            if Array.is_array_of_structs(d):
+                value = np.zeros(d.shape()).tolist()
 
-                    for indices in NdArray.iterate(d.shape()):
-                        cache = NdArray.get(self.values[d], indices)
-                        NdArray.assign(value, indices, cache.get_as_dict())
+                for indices in NdArray.iterate(d.shape()):
+                    cache = NdArray.get(self.values[d], indices)
+                    NdArray.assign(value, indices, cache.get_as_dict())
 
             data[d] = value
 
@@ -891,6 +897,41 @@ class ByteCache(object):
 
             else:
                 self.values[d] = values[d]
+
+    def set_dirty(self, dirty, include_children=True):
+        self.dirty = dirty
+
+        if include_children:
+            for d in self.definition.definitions:
+                value = self.values[d]
+
+                if isinstance(d, Struct):
+                    value.set_dirty(dirty, include_children)
+
+                if Array.is_array_of_structs(d):
+                    for indices in NdArray.iterate(d.shape()):
+                        NdArray.get(value, indices).set_dirty(dirty, include_children)
+
+    def is_dirty(self, include_children=True):
+        if not include_children:
+            return self.dirty
+
+        dirty = self.dirty
+
+        for d in self.definition.definitions:
+            if dirty:
+                return True
+
+            value = self.values[d]
+
+            if isinstance(d, Struct):
+                dirty = dirty or value.is_dirty(include_children)
+
+            if Array.is_array_of_structs(d):
+                for indices in NdArray.iterate(d.shape()):
+                    dirty = dirty or NdArray.get(value, indices).is_dirty(include_children)
+
+        return dirty
 
     def __str__(self):
         s = self.__class__.__name__ + " around\n"
@@ -927,6 +968,7 @@ class ByteCache(object):
 
     def __setitem__(self, key, value):
         self.values[self.__definition_from_key(key)] = value
+        self.dirty = True
 
 
 # specs

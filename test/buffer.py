@@ -121,6 +121,95 @@ class BufferTest(unittest.TestCase):
             if sync_mode is lv.BufferCPU.SYNC_LAZY:
                 self.assertTrue(buffer_out.is_synced())
 
+    def test_partially_modified_buffer(self):
+        glsl = """
+            #version 450
+            #extension GL_ARB_separate_shader_objects : enable
+
+            layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
+            
+            struct Struct1 {
+                uint var1;
+                uint var2;
+            };
+            
+            struct Struct2 {
+                double var1;
+                Struct1[2] var2;
+            };
+
+            layout(std140, binding = 0) buffer readonly BufferA {
+                float var1;
+                Struct2 var2;
+                vec2[3] var3;
+            } inputData;
+            
+            layout(std140, binding = 1) buffer writeonly BufferB {
+                float var1;
+                Struct2 var2;
+                vec2[3] var3;
+            } outputData;
+
+            void main() {
+                outputData.var1 = inputData.var1;
+                outputData.var2 = inputData.var2;
+                outputData.var3 = inputData.var3;
+            }
+            """
+
+        shader = self.shader_from_txt(glsl, verbose=True)
+        classes = [lv.BufferCPU, lv.StagedBuffer]
+        sync_mode = lv.BufferCPU.SYNC_LAZY
+
+        for cls_in, cls_out in itertools.product(classes, classes):
+            buffer_in = cls_in.from_shader(self.session, shader, binding=0, sync_mode=sync_mode)
+            buffer_out = cls_in.from_shader(self.session, shader, binding=1, sync_mode=sync_mode)
+
+            stage = lv.Stage(shader, {0: buffer_in, 1: buffer_out})
+            stage.record(1, 1, 1)
+
+            buffer_in["var1"] = 0.0
+            buffer_in["var2"]["var1"] = 1.0
+            buffer_in["var2"]["var2"][0]["var1"] = 11
+            buffer_in["var2"]["var2"][0]["var2"] = 12
+            buffer_in["var2"]["var2"][1]["var1"] = 21
+            buffer_in["var2"]["var2"][1]["var2"] = 22
+            buffer_in["var3"] = np.array(((1.0, 1.0), (2.0, 2.0), (3.0, 3.0)), dtype=np.float32)
+
+            self.assertFalse(buffer_in.is_synced())
+
+            stage.run_and_wait()
+
+            # change in nested struct
+            new_value = 9.0
+            buffer_in["var2"]["var1"] = new_value
+            self.assertFalse(buffer_in.is_synced())
+
+            stage.run_and_wait()
+
+            self.assertEqual(buffer_in["var2"]["var1"], new_value)
+            self.assertEqual(buffer_out["var2"]["var1"], new_value)
+
+            # change in array of structs
+            new_value = 99
+            buffer_in["var2"]["var2"][0]["var2"] = new_value
+            self.assertFalse(buffer_in.is_synced())
+
+            stage.run_and_wait()
+
+            self.assertEqual(buffer_in["var2"]["var2"][0]["var2"], new_value)
+            self.assertEqual(buffer_out["var2"]["var2"][0]["var2"], new_value)
+
+            # change on highest level
+            new_value = 999.0
+            buffer_in["var1"] = new_value
+            self.assertFalse(buffer_in.is_synced())
+
+            stage.run_and_wait()
+
+            self.assertEqual(buffer_in["var1"], new_value)
+            self.assertEqual(buffer_out["var1"], new_value)
+
 # more tests:
 # missing readonly, writeonly decorations
 

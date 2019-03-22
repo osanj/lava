@@ -112,7 +112,6 @@ class BufferCPU(Buffer):
         super(BufferCPU, self).__init__(session, block_definition, block_usage, Buffer.LOCATION_CPU)
         self.cache = ByteCache(self.block_definition)
         self.sync_mode = sync_mode
-        self.fresh_cache = False
         self.fresh_bytez = False
 
     @classmethod
@@ -123,7 +122,7 @@ class BufferCPU(Buffer):
 
     def before_stage(self, stage, binding, access_modifier):
         if access_modifier in [Access.READ_ONLY, Access.READ_WRITE]:
-            if self.sync_mode is self.SYNC_LAZY and self.fresh_cache:
+            if self.sync_mode is self.SYNC_LAZY and self.cache.is_dirty():
                 self.flush()
 
     def after_stage(self, stage, binding, access_modifier):
@@ -139,13 +138,12 @@ class BufferCPU(Buffer):
 
     def __setitem__(self, key, value):
         self.cache[key] = value
-        self.fresh_cache = True
 
         if self.sync_mode is self.SYNC_EAGER:
             self.flush()
 
     def is_synced(self):
-        return not self.fresh_bytez and not self.fresh_cache
+        return not self.fresh_bytez and not self.cache.is_dirty()
 
     def flush(self):
         if self.fresh_bytez:
@@ -155,18 +153,18 @@ class BufferCPU(Buffer):
         data = self.cache.get_as_dict()
         bytez = self.block_definition.to_bytes(data)
         self.vulkan_buffer.map(bytez)
-        self.fresh_cache = False
+        self.cache.set_dirty(False)
         self.fresh_bytez = False
 
     def fetch(self):
-        if self.fresh_cache:
+        if self.cache.is_dirty():
             warnings.warn("Cache contains data which is not in the buffer, it will by overwritten", RuntimeWarning)
 
         with self.vulkan_buffer.mapped() as bytebuffer:
             bytez = bytebuffer[:]
         data = self.block_definition.from_bytes(bytez)
         self.cache.set_from_dict(data)
-        self.fresh_cache = False
+        self.cache.set_dirty(False)
         self.fresh_bytez = False
 
 
@@ -214,7 +212,7 @@ class StagedBuffer(BufferInterface):
 
     def before_stage(self, stage, binding, access_modifier):
         if access_modifier in [Access.READ_ONLY, Access.READ_WRITE]:
-            if self.sync_mode is self.SYNC_LAZY and self.buffer_cpu.fresh_cache:
+            if self.sync_mode is self.SYNC_LAZY and self.buffer_cpu.cache.is_dirty():
                 self.flush()
 
     def after_stage(self, stage, binding, access_modifier):
@@ -238,7 +236,7 @@ class StagedBuffer(BufferInterface):
         return not self.fresh_bytez and self.buffer_cpu.is_synced()
 
     def flush(self):
-        if self.buffer_cpu.fresh_cache:
+        if self.buffer_cpu.cache.is_dirty():
             self.buffer_cpu.flush()
         self.buffer_cpu.copy_to(self.buffer_gpu)
         self.fresh_bytez = False
