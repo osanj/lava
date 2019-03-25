@@ -157,7 +157,7 @@ class BufferTest(unittest.TestCase):
             }
             """
 
-        shader = self.shader_from_txt(glsl, verbose=True)
+        shader = self.shader_from_txt(glsl, verbose=False)
         classes = [lv.BufferCPU, lv.StagedBuffer]
         sync_mode = lv.BufferCPU.SYNC_LAZY
 
