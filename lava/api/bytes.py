@@ -178,7 +178,7 @@ class ScalarInt(Scalar):
 class ScalarUnsignedInt(Scalar):
 
     def __init__(self):
-        super(ScalarUnsignedInt, self).__init__((int, np.uint32))
+        super(ScalarUnsignedInt, self).__init__((int, np.uint32, bool, np.bool, np.bool_))
 
     def numpy_dtype(self):
         return np.uint32
@@ -191,9 +191,9 @@ class ScalarUnsignedInt(Scalar):
 
     def to_bytes(self, value):
         super(ScalarUnsignedInt, self).to_bytes(value)
-        if type(value) is int:
-            if not (0 <= value <= 0xFFFFFFFF):
-                raise RuntimeError("Value {} is out of memory bounds")
+        if not (0 <= value <= 0xFFFFFFFF):
+            raise RuntimeError("Value {} is out of memory bounds")
+        if type(value) != np.uint32:
             value = np.uint32(value)
         return bytearray(value.tobytes())
 

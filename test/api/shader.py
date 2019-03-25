@@ -192,6 +192,41 @@ class TestByteCodeInspection(GlslBasedTest):
             detected_definition, _ = shader.get_block(0)
             self.assertTrue(container.compare(detected_definition, quiet=True))
 
+    def test_detection_type_bools(self):
+        glsl = """
+            #version 450
+            #extension GL_ARB_separate_shader_objects : enable
+
+            layout({layout}, binding = 0) buffer Buffer {{
+                bool var1;
+                bool[720][1280] var2;
+                bvec2 var3;
+                bvec3 var4;
+                bvec4 var5;
+                bvec3[5] var6;
+            }};
+
+            void main() {{}}
+            """
+
+        for layout in (Layout.STD140, Layout.STD430):
+            # the vulkan spir-v compiler turns bools into uints
+            expected_definition = Struct([
+                Scalar.uint(),
+                Array(Scalar.uint(), (720, 1280), layout),
+                Vector.uvec2(),
+                Vector.uvec3(),
+                Vector.uvec4(),
+                Array(Vector.uvec3(), 5, layout)
+            ], layout)
+
+            shader = self.shader_from_txt(glsl.format(layout=layout), verbose=False)
+            shader.inspect()
+
+            detected_definition, _ = shader.get_block(0)
+            equal = expected_definition.compare(detected_definition, quiet=True)
+            self.assertTrue(equal)
+
     def test_detection_layout_stdxxx_ssbo(self):
         variables = [Scalar.uint(), Scalar.int(), Scalar.float(), Scalar.double()]
         variables += [Vector(n, dtype) for n, dtype in itertools.product(range(2, 5), DataType.ALL)]
