@@ -308,6 +308,68 @@ class CombinedTest(GlslBasedTest):
                     b = b.tolist()
                 self.assertEqual(a, b)
 
+    def test_pass_through_bools(self):
+        glsl_template = """
+            #version 450
+            #extension GL_ARB_separate_shader_objects : enable
+
+            layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
+
+            layout({layout_in}, binding = 0) buffer BufferA {{
+                {dtype} dataIn;
+                {dtype}[{array_size}] dataArrayIn;
+            }};
+
+            layout({layout_out}, binding = 1) buffer BufferB {{
+                {dtype} dataOut;
+                {dtype}[{array_size}] dataArrayOut;
+            }};
+
+            void main() {{
+                dataOut = dataIn;
+                dataArrayOut = dataArrayIn;
+            }}
+            """
+
+        dtypes = ["bool", "bvec2", "bvec3", "bvec4"]
+        array_size = 5
+
+        for dtype, layout_in, layout_out in itertools.product(dtypes, self.LAYOUTS, self.LAYOUTS):
+            glsl = glsl_template.format(**{
+                "layout_in": self.LAYOUT_MAP[layout_in],
+                "layout_out": self.LAYOUT_MAP[layout_out],
+                "dtype": dtype,
+                "array_size": array_size
+            })
+
+            shader = self.shader_from_txt(glsl, verbose=False)
+            shader.inspect()
+
+            cache_in = ByteCache(shader.get_block_definition(0))
+            m = 1 if dtype == "bool" else cache_in.definition.definitions[0].length()
+
+            if m == 1:
+                data_in = True
+                data_array_in = (np.arange(array_size) % 2).astype(bool)
+            else:
+                data_in = np.array([True] * m)
+                data_array_in = (np.arange(array_size * m).reshape((array_size, m)) % 2).astype(bool)
+
+            cache_in["dataIn"] = data_in
+            cache_in["dataArrayIn"] = data_array_in
+            bytez_in = cache_in.definition.to_bytes(cache_in.get_as_dict())
+
+            cache_out = ByteCache(shader.get_block_definition(1))
+            bytez_out_count = cache_out.definition.size()
+            bytez_out = self.run_compiled_program(shader, bytez_in, bytez_out_count)
+            cache_out.set_from_dict(cache_out.definition.from_bytes(bytez_out))
+
+            if m == 1:
+                self.assertEqual(cache_out["dataOut"], data_in)
+            else:
+                self.assertTrue((cache_out["dataOut"] == data_in).all())
+            self.assertTrue((cache_out["dataArrayOut"] == data_array_in).all())
+
 
 if __name__ == "__main__":
     unittest.main()

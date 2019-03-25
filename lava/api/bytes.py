@@ -585,41 +585,44 @@ class Array(ByteRepresentation):
             return bytez
 
     def to_bytes_for_scalars(self, array):
+        transfer_dtype = self.definition.numpy_dtype()
+
         if not isinstance(array, np.ndarray):
             raise RuntimeError("Got datatype {} for {} variable, expected {}".format(type(array), self.glsl_dtype(), np.ndarray))
-        if array.dtype != self.definition.numpy_dtype():
-            raise RuntimeError("Got datatype {} for {} variable, expected {}".format(array.dtype, self.glsl_dtype(), self.definition.numpy_dtype()))
+        if array.dtype.type not in self.definition.input_dtypes:
+            raise RuntimeError("Got datatype {} for {} variable, expected {}".format(array.dtype, self.glsl_dtype(), self.definition.input_dtypes))
         if tuple(array.shape) != self.shape():
             raise RuntimeError("Got shape {} for {} variable, expected {}".format(array.shape, self.glsl_dtype(), self.shape()))
 
         if self.layout == Layout.STD430:
-            return array.flatten().tobytes()
+            return array.astype(transfer_dtype).flatten().tobytes()
 
         else:
             p = (self.a - self.definition.alignment()) // self.definition.size()
             a = self.a // self.definition.size()
 
-            array_padded = np.zeros(a * np.product(array.shape), dtype=array.dtype)
+            array_padded = np.zeros(a * np.product(array.shape), dtype=transfer_dtype)
             mask = (np.arange(len(array_padded)) % a) < (a - p)
             array_padded[mask] = array.flatten()
 
             return array_padded.tobytes()
 
     def to_bytes_for_vectors(self, array):
-        numpy_dtype = self.definition.scalar.numpy_dtype()
+        numpy_dtypes = self.definition.scalar.input_dtypes
+        transfer_dtype = self.definition.scalar.numpy_dtype()
         shape = tuple(list(self.shape()) + [self.definition.length()])
 
         if not isinstance(array, np.ndarray):
             raise RuntimeError("Got datatype {} for {} variable, expected {}".format(type(array), self.glsl_dtype(), np.ndarray))
-        if array.dtype != numpy_dtype:
-            raise RuntimeError("Got datatype {} for {} variable, expected {}".format(array.dtype, self.glsl_dtype(), numpy_dtype))
+        if array.dtype.type not in numpy_dtypes:
+            raise RuntimeError("Got datatype {} for {} variable, expected {}".format(array.dtype, self.glsl_dtype(), numpy_dtypes))
         if tuple(array.shape) != shape:
             raise RuntimeError("Got shape {} for {} variable, expected {}".format(array.shape, self.glsl_dtype(), shape))
 
         p = (self.a - self.definition.size()) // self.definition.scalar.size()
         a = self.a // self.definition.scalar.size()
 
-        array_padded = np.zeros(a * np.product(shape[:-1]), dtype=array.dtype)
+        array_padded = np.zeros(a * np.product(shape[:-1]), dtype=transfer_dtype)
         mask = (np.arange(len(array_padded)) % a) < (a - p)
         array_padded[mask] = array.flatten()
 
