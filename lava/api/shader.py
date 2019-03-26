@@ -2,11 +2,11 @@
 
 import vulkan as vk
 
-from lava.api.bytecode import ByteCode
+from lava.api.bytecode import ByteCode, ByteCodeError
 from lava.api.bytes import Array, Matrix, Scalar, Struct, Vector
 from lava.api.constants.spirv import Access, Decoration, ExecutionMode, ExecutionModel, Layout, Order, StorageClass
 from lava.api.constants.vk import BufferUsage
-from lava.api.util import Destroyable
+from lava.api.util import Destroyable, LavaError, LavaUnsupportedError
 
 
 class Shader(Destroyable):
@@ -58,7 +58,7 @@ class Shader(Destroyable):
         execution_mode, literals = self.byte_code.find_entry_point_details(entry_point_index)
 
         if execution_mode != ExecutionMode.LOCAL_SIZE:
-            raise RuntimeError("Unsupported execution mode {}".format(execution_mode))
+            raise LavaUnsupportedError("Unsupported execution mode {}".format(execution_mode))
 
         return literals
 
@@ -147,12 +147,12 @@ class Shader(Destroyable):
                                                type_name=struct_name)
 
         else:
-            raise RuntimeError("Unexpected parsing error")
+            raise ByteCodeError.unexpected()
 
     def build_matrix_definition(self, matrix_index, layout, last_struct_index):
         # we assume that matrices always have the order decoration in bytecode (if they are part of a interface block)
         if last_struct_index is None:
-            raise RuntimeError("Unexpected parsing error")
+            raise ByteCodeError.unexpected()
 
         member_indices = self.byte_code.find_member_ids(last_struct_index)
         member_orders = self.byte_code.find_orders(last_struct_index)
@@ -174,7 +174,7 @@ class Shader(Destroyable):
                         break
 
             if member is None:
-                raise RuntimeError("Unexpected parsing error")
+                raise ByteCodeError.unexpected()
 
         order_decoration = member_orders[member]
         order = {Decoration.ROW_MAJOR: Order.ROW_MAJOR, Decoration.COL_MAJOR: Order.COLUMN_MAJOR}[order_decoration]
@@ -224,7 +224,7 @@ class Shader(Destroyable):
         offsets_bytecode = [offsets_bytecode.get(i) for i in range(len(definition.definitions))]
 
         if None in offsets_bytecode:
-            raise RuntimeError("Unexpected error in bytecode inspection")
+            raise ByteCodeError.unexpected()
 
         if offsets_bytecode != definition.offsets():
             return False
@@ -245,6 +245,11 @@ class Shader(Destroyable):
 
         for index in self.block_data:
             bindings.append(self.block_data[index][2])
+
+        for binding in bindings:
+            count = bindings.count(binding)
+            if count > 1:
+                raise LavaError("Binding {} is used {} times".format(binding, count))
 
         return list(sorted(bindings))
 
@@ -284,7 +289,7 @@ class Shader(Destroyable):
         decorations = self.byte_code.find_accesses(index)
 
         if len(decorations) not in (0, len(block_definition.definitions)):  # 0 for no access decorations at all
-            raise RuntimeError("Unexpected error in bytecode inspection")
+            raise ByteCodeError.unexpected()
 
         accesses = set()
 
@@ -301,7 +306,7 @@ class Shader(Destroyable):
         if len(accesses) == 0:
             accesses.add(Access.READ_WRITE)
         elif len(accesses) > 1:
-            raise RuntimeError("Unexpected error in bytecode inspection")
+            raise ByteCodeError.unexpected()
 
         return accesses.pop()
 

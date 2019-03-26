@@ -8,6 +8,7 @@ import numpy as np
 from lava.api.bytes import Array, Matrix, Vector, Scalar, Struct
 from lava.api.constants.spirv import DataType, Layout
 from lava.api.constants.vk import BufferUsage
+from lava.api.util import LavaError
 
 from test.api.base import GlslBasedTest, Random
 
@@ -371,6 +372,24 @@ class TestByteCodeInspection(GlslBasedTest):
             """
         shader = self.shader_from_txt(glsl, verbose=False)
         shader.inspect()  # just test whether this blows up
+
+    def test_binding_multi_usage(self):
+        glsl = """
+            #version 450
+            #extension GL_ARB_separate_shader_objects : enable
+
+            layout(std140, binding = 0) buffer BufferA {
+                float varA;
+            };
+
+            layout(std140, binding = 0) buffer BufferB {
+                double varB;
+            };
+
+            void main() {}
+            """
+        shader = self.shader_from_txt(glsl, verbose=False)
+        self.assertRaises(LavaError, shader.inspect)
 
 
 if __name__ == "__main__":
