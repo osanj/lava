@@ -3,7 +3,17 @@
 import numpy as np
 
 from lava.api.constants.spirv import DataType, Layout, Order
-from lava.api.util import NdArray
+from lava.api.util import NdArray, LavaError
+
+
+class BytesError(LavaError):
+
+    def __init__(self, message):
+        super(BytesError, self).__init__(message)
+
+    @classmethod
+    def out_of_bounds(cls, value, glsl_dtype):
+        raise cls("Value {} is out of memory bounds for type {}".format(value, glsl_dtype))
 
 
 class ByteRepresentation(object):
@@ -42,7 +52,7 @@ class ByteRepresentation(object):
     def compare_type(cls, type_expected, type_other, path, quiet=True):
         if type_expected != type_other:
             if not quiet:
-                raise RuntimeError(
+                raise TypeError(
                     "Expected type {}, but got type {} at {}".format(type_expected, type_other, ">".join(path)))
             return False
 
@@ -55,7 +65,7 @@ class ByteRepresentation(object):
 
         if layout_expected != layout_other and layout_other != Layout.STDXXX:
             if not quiet:
-                raise RuntimeError(
+                raise TypeError(
                     "Expected layout {}, but got layout {} at {}".format(layout_expected, layout_other, " > ".join(path)))
             return False
 
@@ -65,7 +75,7 @@ class ByteRepresentation(object):
     def compare_order(cls, order_expected, order_other, path, quiet=True):
         if order_expected != order_other:
             if not quiet:
-                raise RuntimeError(
+                raise TypeError(
                     "Expected layout {}, but got layout {} at {}".format(order_expected, order_other, " > ".join(path)))
             return False
         return True
@@ -74,8 +84,8 @@ class ByteRepresentation(object):
     def compare_shape(cls, shape_expected, shape_other, path, quiet):
         if shape_expected != shape_other:
             if not quiet:
-                raise RuntimeError("Expected shape {}, but got shape {} at {}".format(shape_expected, shape_other,
-                                                                                      " > ".join(path)))
+                raise TypeError("Expected shape {}, but got shape {} at {}".format(shape_expected, shape_other,
+                                                                                   " > ".join(path)))
             return False
         return True
 
@@ -121,7 +131,7 @@ class Scalar(ByteRepresentation):
             return ScalarFloat()
         if dtype == DataType.DOUBLE:
             return ScalarDouble()
-        raise RuntimeError("Unknown scalar type '{}'".format(dtype))
+        raise ValueError("Unknown scalar type '{}'".format(dtype))
 
     def copy(self):
         return self.__class__()
@@ -141,7 +151,7 @@ class Scalar(ByteRepresentation):
 
     def to_bytes(self, value):
         if not isinstance(value, self.input_dtypes):
-            raise RuntimeError("{} got dtype {} (expects one of the following {})".format(
+            raise TypeError("{} got dtype {} (expects one of the following {})".format(
                 self.__class__.__name__, type(value), self.input_dtypes
             ))
 
@@ -170,7 +180,7 @@ class ScalarInt(Scalar):
         super(ScalarInt, self).to_bytes(value)
         if type(value) is int:
             if not (-(0x7FFFFFFF + 1) <= value <= 0x7FFFFFFF):
-                raise RuntimeError("Value {} is out of memory bounds")
+                raise BytesError.out_of_bounds(value, self.glsl_dtype())
             value = np.int32(value)
         return bytearray(value.tobytes())
 
@@ -192,7 +202,7 @@ class ScalarUnsignedInt(Scalar):
     def to_bytes(self, value):
         super(ScalarUnsignedInt, self).to_bytes(value)
         if not (0 <= value <= 0xFFFFFFFF):
-            raise RuntimeError("Value {} is out of memory bounds")
+            raise BytesError.out_of_bounds(value, self.glsl_dtype())
         if type(value) != np.uint32:
             value = np.uint32(value)
         return bytearray(value.tobytes())
@@ -331,9 +341,8 @@ class Vector(ByteRepresentation):
 
         if count_expected != count_other:
             if not quiet:
-                raise RuntimeError("Expected vector length {}, but got length {} at {}".format(count_expected,
-                                                                                               count_other,
-                                                                                               " > ".join(path)))
+                raise TypeError("Expected vector length {}, but got length {} at {}".format(count_expected, count_other,
+                                                                                            " > ".join(path)))
             return False
 
         return True
@@ -341,9 +350,9 @@ class Vector(ByteRepresentation):
     def to_bytes(self, array):
         expected_types = (np.ndarray, list, tuple)
         if not isinstance(array, expected_types):
-            raise RuntimeError("Got datatype {} for {} variable, expected {}".format(type(array), self.glsl_dtype(), expected_types))
+            raise TypeError("Got datatype {} for {} variable, expected {}".format(type(array), self.glsl_dtype(), expected_types))
         if len(array) != self.n:
-            raise RuntimeError("Got length {} for {} variable, expected {}".format(len(array), self.glsl_dtype(), self.n))
+            raise TypeError("Got length {} for {} variable, expected {}".format(len(array), self.glsl_dtype(), self.n))
 
         bytez = bytearray()
 
@@ -363,7 +372,7 @@ class Matrix(ByteRepresentation):
     def __init__(self, cols, rows, dtype, layout, order=DEFAULT_ORDER):
         super(Matrix, self).__init__()
         if dtype not in (DataType.FLOAT, DataType.DOUBLE):
-            raise RuntimeError("Matrices of type {} are not supported".format(dtype))
+            raise TypeError("Matrices of type {} are not supported".format(dtype))
         self.dtype = dtype
         self.cols = cols
         self.rows = rows
@@ -435,11 +444,11 @@ class Matrix(ByteRepresentation):
     def to_bytes(self, array):
         expected_types = (np.ndarray, list, tuple)
         if not (isinstance(array, expected_types) or isinstance(array[0], expected_types)):
-            raise RuntimeError("Got datatype {} for {} variable, expected {}".format(type(array), self.glsl_dtype(), expected_types))
+            raise TypeError("Got datatype {} for {} variable, expected {}".format(type(array), self.glsl_dtype(), expected_types))
         shape = (len(array), len(array[0]))
         expected_shape = self.shape()
         if shape != expected_shape:
-            raise RuntimeError("Got shape {} for {} variable, expected {}".format(len(array), self.glsl_dtype(), expected_shape))
+            raise TypeError("Got shape {} for {} variable, expected {}".format(len(array), self.glsl_dtype(), expected_shape))
 
         bytez = bytearray()
 
@@ -588,11 +597,11 @@ class Array(ByteRepresentation):
         transfer_dtype = self.definition.numpy_dtype()
 
         if not isinstance(array, np.ndarray):
-            raise RuntimeError("Got datatype {} for {} variable, expected {}".format(type(array), self.glsl_dtype(), np.ndarray))
+            raise TypeError("Got datatype {} for {} variable, expected {}".format(type(array), self.glsl_dtype(), np.ndarray))
         if array.dtype.type not in self.definition.input_dtypes:
-            raise RuntimeError("Got datatype {} for {} variable, expected {}".format(array.dtype, self.glsl_dtype(), self.definition.input_dtypes))
+            raise TypeError("Got datatype {} for {} variable, expected {}".format(array.dtype, self.glsl_dtype(), self.definition.input_dtypes))
         if tuple(array.shape) != self.shape():
-            raise RuntimeError("Got shape {} for {} variable, expected {}".format(array.shape, self.glsl_dtype(), self.shape()))
+            raise TypeError("Got shape {} for {} variable, expected {}".format(array.shape, self.glsl_dtype(), self.shape()))
 
         if self.layout == Layout.STD430:
             return array.astype(transfer_dtype).flatten().tobytes()
@@ -613,11 +622,11 @@ class Array(ByteRepresentation):
         shape = tuple(list(self.shape()) + [self.definition.length()])
 
         if not isinstance(array, np.ndarray):
-            raise RuntimeError("Got datatype {} for {} variable, expected {}".format(type(array), self.glsl_dtype(), np.ndarray))
+            raise TypeError("Got datatype {} for {} variable, expected {}".format(type(array), self.glsl_dtype(), np.ndarray))
         if array.dtype.type not in numpy_dtypes:
-            raise RuntimeError("Got datatype {} for {} variable, expected {}".format(array.dtype, self.glsl_dtype(), numpy_dtypes))
+            raise TypeError("Got datatype {} for {} variable, expected {}".format(array.dtype, self.glsl_dtype(), numpy_dtypes))
         if tuple(array.shape) != shape:
-            raise RuntimeError("Got shape {} for {} variable, expected {}".format(array.shape, self.glsl_dtype(), shape))
+            raise TypeError("Got shape {} for {} variable, expected {}".format(array.shape, self.glsl_dtype(), shape))
 
         p = (self.a - self.definition.size()) // self.definition.scalar.size()
         a = self.a // self.definition.scalar.size()
@@ -726,7 +735,7 @@ class Struct(ByteRepresentation):
         self.layout = layout  # precomputes alignment
 
         if len(set(definitions)) != len(definitions):
-            raise RuntimeError("For struct members a definition object can not be used more than once")
+            raise BytesError("For struct members a definition object can not be used more than once")
 
     @property
     def layout(self):
@@ -788,7 +797,7 @@ class Struct(ByteRepresentation):
 
     def glsl_dtype(self):
         if self.type_name is None:
-            raise RuntimeError("Type name was not defined for structure")
+            raise BytesError("Type name was not defined for structure")
         return self.type_name
 
     def compare(self, other, path=(), quiet=True):
@@ -802,9 +811,9 @@ class Struct(ByteRepresentation):
 
         if len(definitions_expected) != len(definitions_other):
             if not quiet:
-                raise RuntimeError("Expected {} members, but got {} members at {}".format(len(definitions_expected),
-                                                                                          len(definitions_other),
-                                                                                          " > ".join(path)))
+                raise TypeError("Expected {} members, but got {} members at {}".format(len(definitions_expected),
+                                                                                       len(definitions_other),
+                                                                                       " > ".join(path)))
             return False
 
         for i, (definition_expected, definition_other) in enumerate(zip(definitions_expected, definitions_other)):
@@ -848,7 +857,7 @@ class ByteCache(object):
 
     def __init__(self, definition):
         if type(definition) != Struct:
-            raise RuntimeError("ByteCaches can only be initialized with struct definitions")
+            raise BytesError("ByteCaches can only be initialized with struct definitions")
         self.definition = definition
         self.values = {}
         self.dirty = False

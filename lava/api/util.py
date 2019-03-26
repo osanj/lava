@@ -26,6 +26,18 @@ class Destroyable(object):
         raise NotImplementedError()
 
 
+class LavaError(Exception):
+
+    def __init__(self, message):
+        super(LavaError, self).__init__(message)
+
+
+class LavaUnsupportedError(LavaError):
+
+    def __init__(self, message):
+        super(LavaUnsupportedError, self).__init__(message)
+
+
 class Debugger(Destroyable):
 
     def __init__(self, instance, lvl=logging.INFO):

@@ -4,6 +4,19 @@ import itertools
 import struct
 
 import lava.api.constants.spirv as spirv
+from lava.api.util import LavaError
+
+
+class ByteCodeError(LavaError):
+
+    UNEXPECTED = "Something unexpected happened"
+
+    def __init__(self, message):
+        super(ByteCodeError, self).__init__(message)
+
+    @classmethod
+    def unexpected(cls):
+        return cls(cls.UNEXPECTED)
 
 
 class ByteCode(object):
@@ -56,6 +69,9 @@ class ByteCode(object):
                 strings.append(str(instruction.op))
         return "\n".join(strings)
 
+    def abort(self):
+        raise ByteCodeError.unexpected()
+
     def find_instructions(self, operation):
         results = []
         for instruction in self.instructions:
@@ -99,6 +115,8 @@ class ByteCode(object):
             instructions = self.find_instructions_with_attributes(**search_data)
             if len(instructions) == 1:
                 types_scalar[instructions[0].op.result_id] = type_scalar
+            elif len(instructions) > 1:
+                self.abort()
 
         # vector types reference the scalar types
         for result_id, n in itertools.product(types_scalar.keys(), range(2, 5)):
@@ -106,6 +124,8 @@ class ByteCode(object):
                                                                   component_count=n)
             if len(instructions) == 1:
                 types_vector[instructions[0].op.result_id] = (types_scalar[result_id], n)
+            elif len(instructions) > 1:
+                self.abort()
 
         # matrix types reference the vector types
         for result_id, cols in itertools.product(types_vector.keys(), range(2, 5)):
@@ -114,6 +134,8 @@ class ByteCode(object):
             if len(instructions) == 1:
                 scalar_type, rows = types_vector[result_id]
                 types_matrix[instructions[0].op.result_id] = (scalar_type, rows, cols)
+            elif len(instructions) > 1:
+                self.abort()
 
         return types_scalar, types_vector, types_matrix
 
@@ -205,6 +227,7 @@ class ByteCode(object):
         while len(instructions) == 1:
             array_ids.append(instructions[0].op.element_type)
             instructions = self.find_instructions_with_attributes(OpTypeArray, result_id=array_ids[-1])
+        array_ids = array_ids[:-1]  # last type is no array
 
         strides = []
 
@@ -213,6 +236,8 @@ class ByteCode(object):
                                                                   target_id=array_id)
             if len(instructions) == 1:
                 strides.append(instructions[0].op.literals[0])
+            else:
+                self.abort()
 
         return strides
 
@@ -248,12 +273,12 @@ class ByteCode(object):
             # find associated pointer
             instructions = self.find_instructions_with_attributes(OpTypePointer, type_id=candidate.op.target_id)
             if len(instructions) != 1:
-                continue
+                self.abort()
 
             # find associated variable
             instructions = self.find_instructions_with_attributes(OpVariable, result_type=instructions[0].op.result_id)
             if len(instructions) != 1:
-                continue
+                self.abort()
             storage_class = instructions[0].op.storage_class
 
             # find associated binding
@@ -261,8 +286,13 @@ class ByteCode(object):
                                                                   decoration=spirv.Decoration.BINDING)
 
             block_type = candidate.op.decoration
-            binding_id = instructions[0].op.literals[0] if len(instructions) == 1 else -1
-            blocks[candidate.op.target_id] = (block_type, storage_class, binding_id)
+
+            if len(instructions) == 1:
+                binding_id = instructions[0].op.literals[0]
+                blocks[candidate.op.target_id] = (block_type, storage_class, binding_id)
+
+            else:
+                self.abort()
 
         return blocks
 
@@ -283,6 +313,8 @@ class ByteCode(object):
         if len(instructions) == 1:
             execution_mode = instructions[0].op.execution_mode
             literals = instructions[0].op.literals
+        else:
+            self.abort()
 
         return execution_mode, literals
 
@@ -295,7 +327,7 @@ class ByteCodeHeader(object):
         magic_number, version, generator_magic_number, bound, _ = ByteCode.read_words(bytez, spirv.WORD_COUNT_HEADER)
 
         if magic_number != spirv.MAGIC_NUMBER:
-            raise RuntimeError("MagicNumber does not match SPIR-V specs")
+            raise ByteCodeError("MagicNumber does not match SPIR-V specs")
 
         self.version_major = (version & 0x00FF0000) >> 16
         self.version_minor = (version & 0x0000FF00) >> 8

@@ -8,6 +8,7 @@ import numpy as np
 import lava as lv
 from lava.api.bytes import Array, ScalarFloat, Struct
 from lava.api.constants.spirv import Layout
+from lava.api.util import LavaError
 
 from test.util import write_to_temp_file
 
@@ -45,7 +46,7 @@ class ShaderTest(unittest.TestCase):
         shader = self.shader_from_txt(glsl, verbose=False)
         incompatible_definition = Struct([Array(ScalarFloat(), (721, 1281, 4), Layout.STD140)], Layout.STD140)
         incompatible_buffer = lv.BufferCPU(self.session, incompatible_definition, lv.BufferCPU.USAGE_STORAGE)
-        self.assertRaises(RuntimeError, lv.Stage, shader=shader, bindings={0: incompatible_buffer})
+        self.assertRaises(LavaError, lv.Stage, shader=shader, bindings={0: incompatible_buffer})
 
     def test_convolution(self):
         glsl = """
