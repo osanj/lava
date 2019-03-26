@@ -8,7 +8,7 @@ import warnings
 from future.utils import raise_with_traceback
 
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 
 ENV_VAR_SDK = "VULKAN_SDK"

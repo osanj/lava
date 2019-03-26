@@ -17,8 +17,9 @@ The Vulkan SDK needs to be installed (correct environment variables), see the [L
 ## Features
 
 * automatic memory alignment and parsing of arbitrary complex block interfaces
-  * currently supported: scalars (int, uint, float, double), vectors, matrices, multidimensional arrays and structs
-  * currently not supported: bool and dynamic arrays
+  * supported: scalars (int, uint, float, double), vectors, matrices, multidimensional arrays and structs
+  * partially supported: bool
+  * not supported: dynamic arrays
   * further supported: ssbo's and ubo's, std140 and std430 layouts
   * multidimensional arrays of scalars, vectors or matrices are expected and parsed as respective numpy arrays
 * cpu, gpu and staged buffers
