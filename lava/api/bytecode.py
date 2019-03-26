@@ -70,7 +70,7 @@ class ByteCode(object):
         return "\n".join(strings)
 
     def abort(self):
-        self.abort()
+        raise ByteCodeError.unexpected()
 
     def find_instructions(self, operation):
         results = []
