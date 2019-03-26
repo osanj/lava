@@ -7,7 +7,7 @@ from future.utils import raise_with_traceback
 from lava.api.constants.vk import BufferUsage
 from lava.api.pipeline import ShaderOperation, Pipeline
 from lava.api.shader import Shader as _Shader
-from lava.api.util import Destroyable
+from lava.api.util import Destroyable, LavaError
 
 __all__ = ["Shader", "Stage"]
 
@@ -71,12 +71,12 @@ class Stage(Destroyable):
         if x > x_max or y > y_max or z > z_max:
             msg = "Device supports work group sizes up to x={} y={} z={}, but shader defines x={} y={} z={}".format(
                 x_max, y_max, z_max, x, y, z)
-            raise RuntimeError(msg)
+            raise LavaError(msg)
 
         if x * y * z > group_invocations_max:
             msg = "Device supports work group invocations up to {}, but shader defines {}*{}*{}={}".format(
                 group_invocations_max, x, y, z, x*y*z)
-            raise RuntimeError(msg)
+            raise LavaError(msg)
 
     def check_block_definitions(self):
         memory_object_binding = {}
@@ -85,13 +85,13 @@ class Stage(Destroyable):
 
         for binding, buffer in self.bindings.items():
             if binding not in bindings_shader:
-                raise RuntimeError("Shader does not define binding {}".format(binding))
+                raise LavaError("Shader does not define binding {}".format(binding))
 
             usage_shader = self.shader.get_block_usage(binding)
             usage_buffer = buffer.get_block_usage()
 
             if usage_buffer != usage_shader:
-                raise RuntimeError("Shader defines binding {} as {}, but got {}".format(
+                raise LavaError("Shader defines binding {} as {}, but got {}".format(
                     binding, usage_shader, usage_buffer))
 
             definition_shader = self.shader.get_block_definition(binding)
@@ -99,10 +99,10 @@ class Stage(Destroyable):
 
             try:
                 definition_shader.compare(definition_buffer, quiet=False)
-            except RuntimeError as e:
+            except TypeError as e:
                 msg = "Block definition mismatch of buffer and shader at binding {}".format(binding)
                 msg += "\n" + e.args[0]
-                raise_with_traceback(RuntimeError(msg))
+                raise_with_traceback(LavaError(msg))
 
             if usage_buffer == BufferUsage.UNIFORM_BUFFER:
                 if definition_buffer.size() > max_uniform_size:
@@ -118,7 +118,7 @@ class Stage(Destroyable):
         if x > x_max or y > y_max or z > z_max:
             msg = "Device supports work group counts up to x={} y={} z={}, but requested are x={} y={} z={}".format(
                 x_max, y_max, z_max, x, y, z)
-            raise RuntimeError(msg)
+            raise LavaError(msg)
 
         wait_events = [stage.executor.event for stage in after_stages]
         self.operation.record(x, y, z, wait_events)

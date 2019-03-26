@@ -227,6 +227,7 @@ class ByteCode(object):
         while len(instructions) == 1:
             array_ids.append(instructions[0].op.element_type)
             instructions = self.find_instructions_with_attributes(OpTypeArray, result_id=array_ids[-1])
+        array_ids = array_ids[:-1]  # last type is no array
 
         strides = []
 

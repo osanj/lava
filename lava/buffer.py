@@ -7,7 +7,7 @@ from lava.api.constants.spirv import Access
 from lava.api.constants.vk import BufferUsage, MemoryType
 from lava.api.memory import Buffer as _Buffer
 from lava.api.pipeline import CopyOperation
-from lava.api.util import Destroyable
+from lava.api.util import Destroyable, LavaError, LavaUnsupportedError
 
 __all__ = ["BufferCPU", "BufferGPU", "StagedBuffer"]
 
@@ -25,7 +25,7 @@ class BufferInterface(Destroyable):
     def __init__(self, session, block_definition, block_usage):
         super(BufferInterface, self).__init__()
         if not isinstance(block_definition, Struct):
-            raise RuntimeError("Block definitions must be structs")
+            raise LavaError("Block definitions must be structs")
         self.session = session
         self.block_definition = block_definition
         self.block_usage = block_usage
@@ -85,7 +85,7 @@ class Buffer(BufferInterface):
 
     def allocate(self):
         if self.vulkan_buffer is not None:
-            raise RuntimeError("Buffer is already allocated")
+            raise LavaError("Buffer is already allocated")
 
         self.vulkan_buffer = _Buffer(self.session.device, self.size(), self.block_usage, self.session.queue_index)
 
@@ -182,10 +182,10 @@ class BufferGPU(Buffer):
         return cls(session, block_definition, block_usage)
 
     def __getitem__(self, key):
-        raise RuntimeError("Unsupported, the only way to read gpu buffers, is to copy them to a cpu buffer")
+        raise LavaUnsupportedError("Unsupported, the only way to read gpu buffers, is to copy them to a cpu buffer")
 
     def __setitem__(self, key, value):
-        raise RuntimeError("Unsupported, the only way to write gpu buffers, is to copy from a cpu buffer")
+        raise LavaUnsupportedError("Unsupported, the only way to write gpu buffers, is to copy from a cpu buffer")
 
 
 class StagedBuffer(BufferInterface):
