@@ -11,12 +11,13 @@ from future.utils import raise_with_traceback
 
 __version__ = "0.2.0"
 
+__error = None
 
 ENV_VAR_SDK = "VULKAN_SDK"
 ENV_VAR_LAYER_PATH = "VK_LAYER_PATH"
 
 if ENV_VAR_SDK not in os.environ:
-    raise ImportError("{} environment variable not found".format(ENV_VAR_SDK))
+    __error = ImportError("{} environment variable not found".format(ENV_VAR_SDK))
 
 
 VALIDATION_LEVEL_DEBUG = logging.DEBUG
@@ -36,11 +37,16 @@ def __initialize():
     from .api.constants.vk import QueueType
     from .api.device import PhysicalDevice
     from .api.instance import Instance
-    global __instance, __instance_usages, __devices, VALIDATION_LEVEL
+    global __error, __instance, __instance_usages, __devices, VALIDATION_LEVEL
+
+    if __error:
+        return
 
     if VALIDATION_LEVEL is not None and platform.system() == "Linux":
         if ENV_VAR_LAYER_PATH not in os.environ:
-            raise ImportError("{} environment variable not found (required for validations)".format(ENV_VAR_LAYER_PATH))
+            __error = ImportError("{} environment variable not found (required for validations)"
+                                  .format(ENV_VAR_LAYER_PATH))
+            return
 
     try:
         __instance = Instance(validation_lvl=VALIDATION_LEVEL)
@@ -55,11 +61,19 @@ def __initialize():
             warnings.warn("Did not find any suitable device", RuntimeWarning)
 
     except:
-        raise_with_traceback(ImportError("Could not initialize {}".format(__name__)))
+        __error = ImportError("Could not initialize {}".format(__name__))
+
+
+def initialized():
+    global __error
+    return __error is None
 
 
 def instance():
-    global __instance, __instance_usages, __devices, VALIDATION_LEVEL
+    global __error, __instance, __instance_usages, __devices, VALIDATION_LEVEL
+
+    if __error:
+        raise_with_traceback(__error)
 
     if __instance.validation_lvl != VALIDATION_LEVEL:
         if __instance_usages > 0:
