@@ -1,5 +1,6 @@
 # -*- coding: UTF-8 -*-
 
+import builtins
 import contextlib
 import os
 import sys
@@ -39,7 +40,7 @@ class InitializationTest(unittest.TestCase):
 
         lv.VALIDATION_LEVEL = None
 
-    def test_delayed_import_errors(self):
+    def test_import_missing_variable(self):
         error_on_import = None
         error_on_instance = None
         error_on_devices = None
@@ -62,9 +63,46 @@ class InitializationTest(unittest.TestCase):
             except Exception as e:
                 error_on_devices = e
 
-            initialization_status = lv.initialized()
+        self.assertIsNone(error_on_import)
+        self.assertTrue(isinstance(error_on_instance, ImportError))
+        self.assertTrue(isinstance(error_on_devices, ImportError))
+        self.assertFalse(lv.initialized())
+
+    def test_import_vulkan_unavailable(self):
+        error_on_import = None
+        error_on_instance = None
+        error_on_devices = None
+
+        # mock vulkan initialization error
+        # https://stackoverflow.com/a/2481588
+        import_original = builtins.__import__
+
+        def import_mock(name, *args, **kwargs):
+            if name == "vulkan":
+                # https://github.com/realitix/vulkan/blob/1.1.99.0/generator/vulkan.template.py#L105
+                raise OSError("Cannot find Vulkan SDK version. Please ensure...")
+            return import_original(name, *args, **kwargs)
+
+        builtins.__import__ = import_mock
+
+        try:
+            import lava as lv
+        except Exception as e:
+            error_on_import = e
+
+        try:
+            lv.instance()
+        except Exception as e:
+            error_on_instance = e
+
+        try:
+            lv.devices()
+        except Exception as e:
+            error_on_devices = e
 
         self.assertIsNone(error_on_import)
-        self.assertIsNotNone(error_on_instance)
-        self.assertIsNotNone(error_on_devices)
-        self.assertFalse(initialization_status)
+        self.assertTrue(isinstance(error_on_instance, OSError))
+        self.assertTrue(isinstance(error_on_devices, OSError))
+        self.assertFalse(lv.initialized())
+
+        builtins.__import__ = import_original
