@@ -3,6 +3,7 @@
 import atexit
 import logging
 import os
+import platform
 import warnings
 
 from future.utils import raise_with_traceback
@@ -16,9 +17,6 @@ ENV_VAR_LAYER_PATH = "VK_LAYER_PATH"
 
 if ENV_VAR_SDK not in os.environ:
     raise ImportError("{} environment variable not found".format(ENV_VAR_SDK))
-
-# if ENV_VAR_LAYER_PATH not in os.environ:
-#     raise ImportError("{} environment variable not found".format(ENV_VAR_LAYER_PATH))
 
 
 VALIDATION_LEVEL_DEBUG = logging.DEBUG
@@ -39,6 +37,10 @@ def __initialize():
     from .api.device import PhysicalDevice
     from .api.instance import Instance
     global __instance, __instance_usages, __devices, VALIDATION_LEVEL
+
+    if VALIDATION_LEVEL is not None and platform.system() == "Linux":
+        if ENV_VAR_LAYER_PATH not in os.environ:
+            raise ImportError("{} environment variable not found (required for validations)".format(ENV_VAR_LAYER_PATH))
 
     try:
         __instance = Instance(validation_lvl=VALIDATION_LEVEL)
