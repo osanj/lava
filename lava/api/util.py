@@ -45,13 +45,14 @@ class Debugger(Destroyable):
         self.instance = instance
         self.lvl = lvl
         self.handle = None
+        self.history = []
+        self.history_size = 100
         self.attach()
 
     def _destroy(self):
         self.detach()
 
-    @staticmethod
-    def log(flags, object_type, object, location, message_code, layer, message, user_data):
+    def log(self, flags, object_type, object, location, message_code, layer, message, user_data):
         lvl = logging.DEBUG
 
         if flags & vk.VK_DEBUG_REPORT_INFORMATION_BIT_EXT:
@@ -61,7 +62,12 @@ class Debugger(Destroyable):
         if flags & vk.VK_DEBUG_REPORT_ERROR_BIT_EXT:
             lvl = logging.ERROR
 
-        print("[VULKAN] " + message[::])
+        message_str = message[::]
+        self.history.insert(0, message_str)
+        if len(self.history) > self.history_size:
+            self.history = self.history[:self.history_size]
+
+        print("[VULKAN] " + message_str)
         return 0
 
     def attach(self):
