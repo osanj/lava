@@ -13,3 +13,5 @@ class InitializationTest(unittest.TestCase):
         debugger = lv.instance().debugger
         self.assertTrue(len(debugger.history) > 0)
         self.assertTrue("CREATE PhysicalDevice object" in " ".join(debugger.history))
+
+        lv.VALIDATION_LEVEL = None
