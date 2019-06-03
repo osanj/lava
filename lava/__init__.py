@@ -17,8 +17,8 @@ ENV_VAR_LAYER_PATH = "VK_LAYER_PATH"
 if ENV_VAR_SDK not in os.environ:
     raise ImportError("{} environment variable not found".format(ENV_VAR_SDK))
 
-if ENV_VAR_LAYER_PATH not in os.environ:
-    raise ImportError("{} environment variable not found".format(ENV_VAR_LAYER_PATH))
+# if ENV_VAR_LAYER_PATH not in os.environ:
+#     raise ImportError("{} environment variable not found".format(ENV_VAR_LAYER_PATH))
 
 
 VALIDATION_LEVEL_DEBUG = logging.DEBUG
