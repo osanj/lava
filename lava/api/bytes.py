@@ -821,8 +821,11 @@ class Struct(ByteRepresentation):
         return self.type_name
 
     def __extend_path(self, path, member_index):
-        member_name = self.member_names[member_index] or member_index
-        return list(path) + ["member {}".format(member_name)]
+        if self.member_names[member_index]:
+            step = "'{}'".format(self.member_names[member_index])
+        else:
+            step = str(member_index)
+        return list(path) + ["member " + step]
 
     def compare(self, other, path=(), quiet=True):
         if not self.compare_type(type(self), type(other), path, quiet):
