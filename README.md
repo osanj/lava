@@ -1,6 +1,7 @@
 # Lava
 
 * [Installation](#installation)
+* [Support](#support)
 * [Features](#features)
 * [Example](#example)
 
@@ -11,7 +12,17 @@
 pip install lava
 ```
 
-The Vulkan SDK needs to be installed (correct environment variables), see the [LunarG guide](https://vulkan.lunarg.com/doc/view/1.1.85.0/linux/getting_started.html). As of now `lava` is only tested on Ubuntu 18.04 with Nvidia's 415 driver, Windows is currently not supported.
+The Vulkan SDK needs to be installed and its environment variables need to be set.
+See the LunarG guide for [Linux](https://vulkan.lunarg.com/doc/view/1.1.85.0/linux/getting_started.html) and [Windows](https://vulkan.lunarg.com/doc/view/1.1.85.0/windows/getting_started.html).
+
+## Support
+
+Sofar `lava` was tested on:
+* Nvidia Tesla V100, Ubuntu 18.04 + Nvidia 415 (✓ works)
+* Nvidia 1080 GTX, Ubuntu 18.04 + Nvidia 415 (✓ works)
+* Nvidia 1080 GTX, Ubuntu 18.04 + Nvidia 396 (✗ does not work, driver issue)
+* Nvidia 1080 GTX, Windows 10 (✓ works)
+* Intel HD, Ubuntu 18.04 + Mesa (✓ works)
 
 
 ## Features
