@@ -49,11 +49,15 @@ class ByteRepresentation(object):
         raise NotImplementedError()
 
     @classmethod
+    def path_to_str(cls, path):
+        return " > ".join(path)
+
+    @classmethod
     def compare_type(cls, type_expected, type_other, path, quiet=True):
         if type_expected != type_other:
             if not quiet:
                 raise TypeError(
-                    "Expected type {}, but got type {} at {}".format(type_expected, type_other, ">".join(path)))
+                    "Expected type {}, but got type {} at {}".format(type_expected, type_other, cls.path_to_str(path)))
             return False
 
         return True
@@ -66,7 +70,8 @@ class ByteRepresentation(object):
         if layout_expected != layout_other and layout_other != Layout.STDXXX:
             if not quiet:
                 raise TypeError(
-                    "Expected layout {}, but got layout {} at {}".format(layout_expected, layout_other, " > ".join(path)))
+                    "Expected layout {}, but got layout {} at {}".format(layout_expected, layout_other,
+                                                                         cls.path_to_str(path)))
             return False
 
         return True
@@ -76,7 +81,8 @@ class ByteRepresentation(object):
         if order_expected != order_other:
             if not quiet:
                 raise TypeError(
-                    "Expected layout {}, but got layout {} at {}".format(order_expected, order_other, " > ".join(path)))
+                    "Expected layout {}, but got layout {} at {}".format(order_expected, order_other,
+                                                                         cls.path_to_str(path)))
             return False
         return True
 
@@ -85,14 +91,14 @@ class ByteRepresentation(object):
         if shape_expected != shape_other:
             if not quiet:
                 raise TypeError("Expected shape {}, but got shape {} at {}".format(shape_expected, shape_other,
-                                                                                   " > ".join(path)))
+                                                                                   cls.path_to_str(path)))
             return False
         return True
 
     def compare(self, other, path, quiet=True):
         raise NotImplementedError()
 
-    def to_bytes(self, values):
+    def to_bytes(self, values, path=()):
         raise NotImplementedError()
 
     def from_bytes(self, bytez):
@@ -149,10 +155,10 @@ class Scalar(ByteRepresentation):
     def compare(self, other, path=(), quiet=True):
         return self.compare_type(type(self), type(other), path, quiet)
 
-    def to_bytes(self, value):
+    def to_bytes(self, value, path=()):
         if not isinstance(value, self.input_dtypes):
-            raise TypeError("{} got dtype {} (expects one of the following {})".format(
-                self.__class__.__name__, type(value), self.input_dtypes
+            raise TypeError("{} got dtype {}, expected one of the following {} at {}".format(
+                self.__class__.__name__, type(value), self.input_dtypes, self.path_to_str(path)
             ))
 
     def from_bytes(self, bytez):
@@ -176,8 +182,8 @@ class ScalarInt(Scalar):
     def glsl_dtype(self):
         return "int"
 
-    def to_bytes(self, value):
-        super(ScalarInt, self).to_bytes(value)
+    def to_bytes(self, value, path=()):
+        super(ScalarInt, self).to_bytes(value, path)
         if type(value) is int:
             if not (-(0x7FFFFFFF + 1) <= value <= 0x7FFFFFFF):
                 raise BytesError.out_of_bounds(value, self.glsl_dtype())
@@ -199,8 +205,8 @@ class ScalarUnsignedInt(Scalar):
     def glsl_dtype(self):
         return "uint"
 
-    def to_bytes(self, value):
-        super(ScalarUnsignedInt, self).to_bytes(value)
+    def to_bytes(self, value, path=()):
+        super(ScalarUnsignedInt, self).to_bytes(value, path)
         if not (0 <= value <= 0xFFFFFFFF):
             raise BytesError.out_of_bounds(value, self.glsl_dtype())
         if type(value) != np.uint32:
@@ -222,8 +228,8 @@ class ScalarFloat(Scalar):
     def glsl_dtype(self):
         return "float"
 
-    def to_bytes(self, value):
-        super(ScalarFloat, self).to_bytes(value)
+    def to_bytes(self, value, path=()):
+        super(ScalarFloat, self).to_bytes(value, path)
         if type(value) is float:
             # TODO: add range check
             value = np.float32(value)
@@ -244,8 +250,8 @@ class ScalarDouble(Scalar):
     def glsl_dtype(self):
         return "double"
 
-    def to_bytes(self, value):
-        super(ScalarDouble, self).to_bytes(value)
+    def to_bytes(self, value, path=()):
+        super(ScalarDouble, self).to_bytes(value, path)
         if type(value) is float:
             # TODO: add range check
             value = np.float64(value)
@@ -341,23 +347,25 @@ class Vector(ByteRepresentation):
 
         if count_expected != count_other:
             if not quiet:
-                raise TypeError("Expected vector length {}, but got length {} at {}".format(count_expected, count_other,
-                                                                                            " > ".join(path)))
+                raise TypeError("Expected vector length {}, but got length {} at {}".format(
+                    count_expected, count_other, self.path_to_str(path)))
             return False
 
         return True
 
-    def to_bytes(self, array):
+    def to_bytes(self, array, path=()):
         expected_types = (np.ndarray, list, tuple)
         if not isinstance(array, expected_types):
-            raise TypeError("Got datatype {} for {} variable, expected {}".format(type(array), self.glsl_dtype(), expected_types))
+            raise TypeError("Got datatype {} for {} variable, expected {} at {}"
+                            .format(type(array), self.glsl_dtype(), expected_types, self.path_to_str(path)))
         if len(array) != self.n:
-            raise TypeError("Got length {} for {} variable, expected {}".format(len(array), self.glsl_dtype(), self.n))
+            raise TypeError("Got length {} for {} variable, expected {} at {}"
+                            .format(len(array), self.glsl_dtype(), self.n, self.path_to_str(path)))
 
         bytez = bytearray()
 
         for value in array:
-            bytez += self.scalar.to_bytes(value)
+            bytez += self.scalar.to_bytes(value, path)
 
         return bytez
 
@@ -441,26 +449,28 @@ class Matrix(ByteRepresentation):
             return False
         return True
 
-    def to_bytes(self, array):
+    def to_bytes(self, array, path=()):
         expected_types = (np.ndarray, list, tuple)
         if not (isinstance(array, expected_types) or isinstance(array[0], expected_types)):
-            raise TypeError("Got datatype {} for {} variable, expected {}".format(type(array), self.glsl_dtype(), expected_types))
+            raise TypeError("Got datatype {} for {} variable, expected {} at {}"
+                            .format(type(array), self.glsl_dtype(), expected_types, self.path_to_str(path)))
         shape = (len(array), len(array[0]))
         expected_shape = self.shape()
         if shape != expected_shape:
-            raise TypeError("Got shape {} for {} variable, expected {}".format(len(array), self.glsl_dtype(), expected_shape))
+            raise TypeError("Got shape {} for {} variable, expected {} at {}"
+                            .format(len(array), self.glsl_dtype(), expected_shape, self.path_to_str(path)))
 
         bytez = bytearray()
 
         if self.order == Order.COLUMN_MAJOR:
             for col in range(self.cols):
-                bytez += self.vector.to_bytes([array[row][col] for row in range(self.rows)])
+                bytez += self.vector.to_bytes([array[row][col] for row in range(self.rows)], path)
                 padding = (self.a - len(bytez) % self.a) % self.a
                 bytez += bytearray(padding)
 
         if self.order == Order.ROW_MAJOR:
             for row in range(self.rows):
-                bytez += self.vector.to_bytes([array[row][col] for col in range(self.cols)])
+                bytez += self.vector.to_bytes([array[row][col] for col in range(self.cols)], path)
                 padding = (self.a - len(bytez) % self.a) % self.a
                 bytez += bytearray(padding)
 
@@ -573,35 +583,39 @@ class Array(ByteRepresentation):
         return self.definition.compare(other.definition,
                                        list(path) + ["array {}".format("x".join(map(str, self.shape())))], quiet)
 
-    def to_bytes(self, values):
+    def to_bytes(self, values, path=()):
         if isinstance(self.definition, Scalar):
-            return self.to_bytes_for_scalars(values)
+            return self.to_bytes_for_scalars(values, path)
 
         elif isinstance(self.definition, Vector):
-            return self.to_bytes_for_vectors(values)
+            return self.to_bytes_for_vectors(values, path)
 
         elif isinstance(self.definition, Matrix):
-            return self.to_bytes_for_matrices(values)
+            return self.to_bytes_for_matrices(values, path)
 
         else:
             bytez = bytearray()
 
             for indices in NdArray.iterate(self.shape()):
-                bytez += self.definition.to_bytes(NdArray.get(values, indices))
+                bytez += self.definition.to_bytes(NdArray.get(values, indices),
+                                                  list(path) + ["array" + "".join(["[{}]".format(i) for i in indices])])
                 padding = (self.a - len(bytez) % self.a) % self.a
                 bytez += bytearray(padding)
 
             return bytez
 
-    def to_bytes_for_scalars(self, array):
+    def to_bytes_for_scalars(self, array, path):
         transfer_dtype = self.definition.numpy_dtype()
 
         if not isinstance(array, np.ndarray):
-            raise TypeError("Got datatype {} for {} variable, expected {}".format(type(array), self.glsl_dtype(), np.ndarray))
+            raise TypeError("Got datatype {} for {} variable, expected {} at {}"
+                            .format(type(array), self.glsl_dtype(), np.ndarray, self.path_to_str(path)))
         if array.dtype.type not in self.definition.input_dtypes:
-            raise TypeError("Got datatype {} for {} variable, expected {}".format(array.dtype, self.glsl_dtype(), self.definition.input_dtypes))
+            raise TypeError("Got datatype {} for {} variable, expected {} at {}"
+                            .format(array.dtype, self.glsl_dtype(), self.definition.input_dtypes, self.path_to_str(path)))
         if tuple(array.shape) != self.shape():
-            raise TypeError("Got shape {} for {} variable, expected {}".format(array.shape, self.glsl_dtype(), self.shape()))
+            raise TypeError("Got shape {} for {} variable, expected {} at {}"
+                            .format(array.shape, self.glsl_dtype(), self.shape(), self.path_to_str(path)))
 
         if self.layout == Layout.STD430:
             return array.astype(transfer_dtype).flatten().tobytes()
@@ -616,17 +630,20 @@ class Array(ByteRepresentation):
 
             return array_padded.tobytes()
 
-    def to_bytes_for_vectors(self, array):
+    def to_bytes_for_vectors(self, array, path):
         numpy_dtypes = self.definition.scalar.input_dtypes
         transfer_dtype = self.definition.scalar.numpy_dtype()
         shape = tuple(list(self.shape()) + [self.definition.length()])
 
         if not isinstance(array, np.ndarray):
-            raise TypeError("Got datatype {} for {} variable, expected {}".format(type(array), self.glsl_dtype(), np.ndarray))
+            raise TypeError("Got datatype {} for {} variable, expected {} at {}"
+                            .format(type(array), self.glsl_dtype(), np.ndarray, self.path_to_str(path)))
         if array.dtype.type not in numpy_dtypes:
-            raise TypeError("Got datatype {} for {} variable, expected {}".format(array.dtype, self.glsl_dtype(), numpy_dtypes))
+            raise TypeError("Got datatype {} for {} variable, expected {} at {}"
+                            .format(array.dtype, self.glsl_dtype(), numpy_dtypes, self.path_to_str(path)))
         if tuple(array.shape) != shape:
-            raise TypeError("Got shape {} for {} variable, expected {}".format(array.shape, self.glsl_dtype(), shape))
+            raise TypeError("Got shape {} for {} variable, expected {} at {}"
+                            .format(array.shape, self.glsl_dtype(), shape, self.path_to_str(path)))
 
         p = (self.a - self.definition.size()) // self.definition.scalar.size()
         a = self.a // self.definition.scalar.size()
@@ -637,16 +654,19 @@ class Array(ByteRepresentation):
 
         return array_padded.tobytes()
 
-    def to_bytes_for_matrices(self, array):
+    def to_bytes_for_matrices(self, array, path):
         numpy_dtype = self.definition.vector.scalar.numpy_dtype()
         shape = tuple(list(self.shape()) + list(self.definition.shape()))
 
         if not isinstance(array, np.ndarray):
-            raise RuntimeError("Got datatype {} for {} variable, expected {}".format(type(array), self.glsl_dtype(), np.ndarray))
+            raise RuntimeError("Got datatype {} for {} variable, expected {} at {}"
+                               .format(type(array), self.glsl_dtype(), np.ndarray, self.path_to_str(path)))
         if array.dtype != numpy_dtype:
-            raise RuntimeError("Got datatype {} for {} variable, expected {}".format(array.dtype, self.glsl_dtype(), numpy_dtype))
+            raise RuntimeError("Got datatype {} for {} variable, expected {} at {}"
+                               .format(array.dtype, self.glsl_dtype(), numpy_dtype, self.path_to_str(path)))
         if tuple(array.shape) != shape:
-            raise RuntimeError("Got shape {} for {} variable, expected {}".format(array.shape, self.glsl_dtype(), shape))
+            raise RuntimeError("Got shape {} for {} variable, expected {} at {}"
+                               .format(array.shape, self.glsl_dtype(), shape, self.path_to_str(path)))
 
         # swap the last two dimensions if necessary
         if self.definition.order == Order.COLUMN_MAJOR:
@@ -800,6 +820,13 @@ class Struct(ByteRepresentation):
             raise BytesError("Type name was not defined for structure")
         return self.type_name
 
+    def __extend_path(self, path, member_index):
+        if self.member_names[member_index]:
+            step = "'{}'".format(self.member_names[member_index])
+        else:
+            step = str(member_index)
+        return list(path) + ["member " + step]
+
     def compare(self, other, path=(), quiet=True):
         if not self.compare_type(type(self), type(other), path, quiet):
             return False
@@ -811,25 +838,25 @@ class Struct(ByteRepresentation):
 
         if len(definitions_expected) != len(definitions_other):
             if not quiet:
-                raise TypeError("Expected {} members, but got {} members at {}".format(len(definitions_expected),
-                                                                                       len(definitions_other),
-                                                                                       " > ".join(path)))
+                raise TypeError("Expected {} members, but got {} members at {}".format(
+                    len(definitions_expected), len(definitions_other), self.path_to_str(path)
+                ))
             return False
 
         for i, (definition_expected, definition_other) in enumerate(zip(definitions_expected, definitions_other)):
-            if not definition_expected.compare(definition_other, list(path) + ["member {}".format(i)], quiet):
+            if not definition_expected.compare(definition_other, self.__extend_path(path, i), quiet):
                 return False
 
         return True
 
-    def to_bytes(self, values):
+    def to_bytes(self, values, path=()):
         bytez = bytearray()
 
-        for d in self.definitions:
+        for i, d in enumerate(self.definitions):
             a = d.alignment()
             padding_before = (a - len(bytez) % a) % a
             bytez += bytearray(padding_before)
-            bytez += d.to_bytes(values[d])
+            bytez += d.to_bytes(values[d], self.__extend_path(path, i))
 
         # padding at the end
         a = self.alignment()
@@ -842,7 +869,7 @@ class Struct(ByteRepresentation):
         values = {}
         offset = 0
 
-        for d in self.definitions:
+        for i, d in enumerate(self.definitions):
             a = d.alignment()
             offset += (a - offset % a) % a  # padding before
             size = d.size()
