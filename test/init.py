@@ -24,10 +24,10 @@ class InitializationTest(unittest.TestCase):
         if "lava" in sys.modules:
             del sys.modules["lava"]
 
-    def setUp(self) -> None:
+    def setUp(self):
         self.clear_package()
 
-    def tearDown(self) -> None:
+    def tearDown(self):
         self.clear_package()
 
     def test_validation_level(self):
