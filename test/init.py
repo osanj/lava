@@ -90,6 +90,14 @@ class InitializationTest(unittest.TestCase):
         except Exception as e:
             error_on_import = e
 
+
+        from lava.buffer import BufferCPU, StagedBuffer
+
+        print("abc")
+        buf = BufferCPU(None, None, None)
+        print("abc")
+
+
         try:
             lv.instance()
         except Exception as e:
