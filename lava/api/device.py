@@ -2,8 +2,7 @@
 
 import itertools
 
-import vulkan as vk
-
+import lava.api.vulkan as vk
 from lava.api.constants.vk import DeviceType, MemoryType, QueueType, VALIDATION_LAYERS
 from lava.api.memory import Memory
 from lava.api.util import Destroyable

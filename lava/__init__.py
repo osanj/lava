@@ -28,7 +28,7 @@ __devices = []
 try:
     import vulkan as vk
     __error = None
-except Exception as e:
+except OSError as e:
     __error = e
 
 if ENV_VAR_SDK not in os.environ:
@@ -111,8 +111,7 @@ def __cleanup():
 
 __initialize()
 
-if __error is None:
-    from .buffer import *
-    from .session import *
-    from .shader import *
-    from .util import *
+from .buffer import *
+from .session import *
+from .shader import *
+from .util import *

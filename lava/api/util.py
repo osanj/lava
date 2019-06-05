@@ -5,7 +5,7 @@ import itertools
 import logging
 import operator
 
-import vulkan as vk
+import lava.api.vulkan as vk
 
 
 class Destroyable(object):

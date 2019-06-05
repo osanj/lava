@@ -1,7 +1,6 @@
 # -*- coding: UTF-8 -*-
 
-import vulkan as vk
-
+import lava.api.vulkan as vk
 from lava.api.constants.vk import VALIDATION_LAYERS
 from lava.api.util import Debugger, Destroyable
 

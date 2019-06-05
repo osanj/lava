@@ -2,8 +2,7 @@
 
 import contextlib
 
-import vulkan as vk
-
+import lava.api.vulkan as vk
 from lava.api.constants.vk import BufferUsage, DescriptorType
 from lava.api.util import Destroyable
 

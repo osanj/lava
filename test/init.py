@@ -9,6 +9,8 @@ import unittest
 
 class InitializationTest(unittest.TestCase):
 
+    PKG_NAME = "lava"
+
     @staticmethod
     @contextlib.contextmanager
     def env_backup():
@@ -19,16 +21,16 @@ class InitializationTest(unittest.TestCase):
             os.environ.clear()
             os.environ.update(environ_backup)
 
-    @staticmethod
-    def clear_package():
-        if "lava" in sys.modules:
-            del sys.modules["lava"]
+    @classmethod
+    def clear_lava(cls):
+        if cls.PKG_NAME in sys.modules:
+            del sys.modules[cls.PKG_NAME]
 
     def setUp(self):
-        self.clear_package()
+        self.clear_lava()
 
     def tearDown(self):
-        self.clear_package()
+        self.clear_lava()
 
     def test_validation_level(self):
         import lava as lv
@@ -69,7 +71,7 @@ class InitializationTest(unittest.TestCase):
         self.assertFalse(lv.initialized())
 
     def test_import_vulkan_unavailable(self):
-        error_on_import = None
+        errors_on_module_import = []
         error_on_instance = None
         error_on_devices = None
 
@@ -85,18 +87,25 @@ class InitializationTest(unittest.TestCase):
 
         builtins.__import__ = import_mock
 
-        try:
-            import lava as lv
-        except Exception as e:
-            error_on_import = e
+        # import should not fail
+        import lava as lv
 
+        # find and try all possible module imports, e.g. import lava.api.shader, ...
+        pkg_name = self.PKG_NAME
+        pkg_path = lv.__path__[0]
+        ext = ".py"
+        paths = []
 
-        from lava.buffer import BufferCPU, StagedBuffer
+        for root, dirs, files in os.walk(pkg_path):
+            for name in files:
+                if name.endswith(ext):
+                    paths.append([pkg_name] + root[len(pkg_path):].split(os.sep)[1:] + [name[:-len(ext)]])
 
-        print("abc")
-        buf = BufferCPU(None, None, None)
-        print("abc")
-
+        for path in paths:
+            try:
+                __import__(".".join(path))
+            except Exception as e:
+                errors_on_module_import.append(e)
 
         try:
             lv.instance()
@@ -108,7 +117,7 @@ class InitializationTest(unittest.TestCase):
         except Exception as e:
             error_on_devices = e
 
-        self.assertIsNone(error_on_import)
+        self.assertTrue(len(errors_on_module_import) == 0, "\n".join([str(e) for e in errors_on_module_import]))
         self.assertTrue(isinstance(error_on_instance, OSError))
         self.assertTrue(isinstance(error_on_devices, OSError))
         self.assertFalse(lv.initialized())

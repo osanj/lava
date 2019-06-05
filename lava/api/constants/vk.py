@@ -1,6 +1,6 @@
 # -*- coding: UTF-8 -*-
 
-import vulkan as vk
+import lava.api.vulkan as vk
 
 
 VALIDATION_LAYERS = ["VK_LAYER_LUNARG_standard_validation"]

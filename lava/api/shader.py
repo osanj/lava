@@ -1,7 +1,6 @@
 # -*- coding: UTF-8 -*-
 
-import vulkan as vk
-
+import lava.api.vulkan as vk
 from lava.api.bytecode import ByteCode, ByteCodeError
 from lava.api.bytes import Array, Matrix, Scalar, Struct, Vector
 from lava.api.constants.spirv import Access, Decoration, ExecutionMode, ExecutionModel, Layout, Order, StorageClass
