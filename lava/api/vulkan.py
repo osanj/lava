@@ -4,6 +4,7 @@ __initialized = False
 
 try:
     from vulkan import *
+    from vulkan import __version__
     import vulkan._vulkan as _vulkan
     __initialized = True
 

@@ -46,7 +46,14 @@ class Pipeline(Destroyable):
         pipeline_create_info = vk.VkComputePipelineCreateInfo(stage=shader_stage_create_info,
                                                               layout=self.pipeline_layout_handle)
 
-        self.handle = vk.vkCreateComputePipelines(self.device.handle, None, 1, [pipeline_create_info], None)
+        # https://github.com/realitix/vulkan/compare/1.1.99.0..1.1.99.1#diff-e2b1cc8bd860dd77d19209db868c1a58R5920
+        handles = vk.vkCreateComputePipelines(self.device.handle, None, 1, [pipeline_create_info], None)
+        try:
+            # vulkan 1.1.99.1 and onwards
+            self.handle = handles[0]
+        except TypeError:
+            # vulkan 1.1.99.0 and before
+            self.handle = handles
 
     def _destroy(self):
         if self.descriptor_pool_handle is not None:
