@@ -7,7 +7,7 @@ import platform
 import warnings
 
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 
 ENV_VAR_SDK = "VULKAN_SDK"
 ENV_VAR_LAYER_PATH = "VK_LAYER_PATH"
