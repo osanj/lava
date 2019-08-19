@@ -2,4 +2,5 @@ cffi==1.11.5
 future==0.17.1
 numpy==1.16.3
 pycparser==2.19
+pytest==5.1.0
 vulkan==1.1.99.1
