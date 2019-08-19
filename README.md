@@ -1,4 +1,8 @@
+[![alert_status](https://badges.mldsc.de/osanj.lava-alert_status.svg)](https://badges.mldsc.de/osanj.lava-alert_status.svg)
+[![coverage](https://badges.mldsc.de/osanj.lava-coverage.svg)](https://badges.mldsc.de/osanj.lava-coverage.svg)
+
 # Lava
+
 
 * [Installation](#installation)
 * [Support](#support)
