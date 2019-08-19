@@ -3,4 +3,5 @@ future==0.17.1
 numpy==1.16.3
 pycparser==2.19
 pytest==5.1.0
+pytest-cov==2.7.1
 vulkan==1.1.99.1
