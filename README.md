@@ -1,5 +1,16 @@
 # Lava
 
+[![Bugs](https://badges.mldsc.de/osanj.lava-bugs.svg)](https://badges.mldsc.de/osanj.lava-bugs.svg)
+[![code_smells](https://badges.mldsc.de/osanj.lava-code_smells.svg)](https://badges.mldsc.de/osanj.lava-code_smells.svg)
+[![coverage](https://badges.mldsc.de/osanj.lava-coverage.svg)](https://badges.mldsc.de/osanj.lava-coverage.svg)
+[![duplicated_lines_density](https://badges.mldsc.de/osanj.lava-duplicated_lines_density.svg)](https://badges.mldsc.de/osanj.lava-duplicated_lines_density.svg)
+[![ncloc](https://badges.mldsc.de/osanj.lava-ncloc.svg)](https://badges.mldsc.de/osanj.lava-ncloc.svg)
+[![sqale_rating](https://badges.mldsc.de/osanj.lava-sqale_rating.svg)](https://badges.mldsc.de/osanj.lava-sqale_rating.svg)
+[![alert_status](https://badges.mldsc.de/osanj.lava-alert_status.svg)](https://badges.mldsc.de/osanj.lava-alert_status.svg)
+[![reliability_rating](https://badges.mldsc.de/osanj.lava-reliability_rating.svg)](https://badges.mldsc.de/osanj.lava-reliability_rating.svg)
+[![sqale_index](https://badges.mldsc.de/osanj.lava-sqale_index.svg)](https://badges.mldsc.de/osanj.lava-sqale_index.svg)
+[![vulnerabilities](https://badges.mldsc.de/osanj.lava-vulnerabilities.svg)](https://badges.mldsc.de/osanj.lava-vulnerabilities.svg)
+
 * [Installation](#installation)
 * [Support](#support)
 * [Features](#features)
