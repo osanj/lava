@@ -3,6 +3,7 @@
 
 # Lava
 
+Lava allows leveraging Vulkan compute shaders from Python in an easy manner without writing any C++. Like CUDA kernels, Vulkan compute shaders can be used to move heavy computation into the GPU. For most use cases Lava will expect and return numpy arrays. Overall, Lava is similar to [PyCuda](https://github.com/inducer/pycuda) or [PyOpenCL](https://github.com/inducer/pyopencl).
 
 * [Installation](#installation)
 * [Support](#support)
@@ -31,17 +32,17 @@ Sofar `lava` was tested on:
 
 ## Features
 
-* automatic memory alignment and parsing of arbitrary complex block interfaces
-  * supported: scalars (int, uint, float, double), vectors, matrices, multidimensional arrays and structs
-  * partially supported: bool
-  * not supported: dynamic arrays
-  * further supported: ssbo's and ubo's, std140 and std430 layouts
-  * multidimensional arrays of scalars, vectors or matrices are expected and parsed as respective numpy arrays
-* cpu, gpu and staged buffers
-* intuitive shader execution
-  * block definitions are parsed from the compiled shader bytecode
-  * buffers are bound with a single line of code
-  * buffers and shaders are checked for compatibility, other sanity checks are performed
+* Automatic memory alignment and parsing of arbitrary complex block interfaces
+  * Supported: scalars (int, uint, float, double), vectors, matrices, multidimensional arrays and structs
+  * Partially supported: bool
+  * Not supported: dynamic arrays
+  * Further supported: ssbo's and ubo's, std140 and std430 layouts
+  * Multidimensional arrays of scalars, vectors or matrices are expected and parsed as respective numpy arrays
+* CPU, GPU and staged buffers
+* Intuitive shader execution
+  * Block definitions are parsed from the compiled shader bytecode
+  * Buffers are bound with a single line of code
+  * Buffers and shaders are checked for compatibility, other sanity checks are performed
 
 
 ## Example
