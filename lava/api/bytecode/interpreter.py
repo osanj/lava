@@ -1,24 +1,16 @@
 # -*- coding: UTF-8 -*-
 
-import lava.api.vulkan as vk
-from lava.api.bytecode import ByteCode, ByteCodeError
+from lava.api.bytecode.instruction import ByteCodeError
 from lava.api.bytes import Array, Matrix, Scalar, Struct, Vector
 from lava.api.constants.spirv import Access, Decoration, ExecutionMode, ExecutionModel, Layout, Order, StorageClass
 from lava.api.constants.vk import BufferUsage
-from lava.api.util import Destroyable, LavaError, LavaUnsupportedError
+from lava.api.util import LavaError, LavaUnsupportedError
 
 
-class Shader(Destroyable):
+class ByteCode(object):
 
-    def __init__(self, device, path, entry_point=None):
-        super(Shader, self).__init__()
-        self.device = device
-        with open(path, "rb") as f:
-            self.bytez = f.read()
-            self.handle = vk.vkCreateShaderModule(
-                self.device.handle, vk.VkShaderModuleCreateInfo(codeSize=len(self.bytez), pCode=self.bytez), None)
-
-        self.byte_code = ByteCode(self.bytez)
+    def __init__(self, byte_code_data, entry_point=None):
+        self.data = byte_code_data
 
         # placeholder for inspection variables
         self.definitions_block = None
@@ -28,11 +20,11 @@ class Shader(Destroyable):
         self.entry_point, self.entry_point_index = self.check_entry_point(entry_point)
         self.local_size = self.check_local_size(self.entry_point_index)
 
-    def _destroy(self):
-        vk.vkDestroyShaderModule(self.device.handle, self.handle, None)
+        # off we go
+        self.inspect()
 
     def check_entry_point(self, entry_point):
-        entry_points_detected = self.byte_code.find_entry_points(execution_model=ExecutionModel.GL_COMPUTE)
+        entry_points_detected = self.data.find_entry_points(execution_model=ExecutionModel.GL_COMPUTE)
         index = None
 
         if len(entry_points_detected) == 0:
@@ -54,7 +46,7 @@ class Shader(Destroyable):
         return entry_point, index
 
     def check_local_size(self, entry_point_index):
-        execution_mode, literals = self.byte_code.find_entry_point_details(entry_point_index)
+        execution_mode, literals = self.data.find_entry_point_details(entry_point_index)
 
         if execution_mode != ExecutionMode.LOCAL_SIZE:
             raise LavaUnsupportedError("Unsupported execution mode {}".format(execution_mode))
@@ -68,11 +60,11 @@ class Shader(Destroyable):
         return self.local_size
 
     def inspect(self):
-        self.block_data = self.byte_code.find_blocks()
+        self.block_data = self.data.find_blocks()
         self.definitions_block = {}
 
-        defs_scalar = {index: Scalar.of(dtype) for index, dtype in self.byte_code.types_scalar.items()}
-        defs_vector = {index: Vector(n, dtype) for index, (dtype, n) in self.byte_code.types_vector.items()}
+        defs_scalar = {index: Scalar.of(dtype) for index, dtype in self.data.types_scalar.items()}
+        defs_vector = {index: Vector(n, dtype) for index, (dtype, n) in self.data.types_vector.items()}
         defs_array = {}
         defs_struct = {}
 
@@ -86,18 +78,18 @@ class Shader(Destroyable):
                           last_struct=None):
         default_layout = Layout.STD140
 
-        if index in self.byte_code.types_array:
-            type_index, dims = self.byte_code.types_array[index]
+        if index in self.data.types_array:
+            type_index, dims = self.data.types_array[index]
 
             # build missing definition
-            if type_index in self.byte_code.types_struct and type_index not in definitions_struct:
+            if type_index in self.data.types_struct and type_index not in definitions_struct:
                 self.deduce_definition(type_index, definitions_scalar, definitions_vector, definitions_array,
                                        definitions_struct, last_struct)
 
             definition = None
 
             # matrix types are shared, but still affected by the layout, create a instance for every occurrence
-            if type_index in self.byte_code.types_matrix:
+            if type_index in self.data.types_matrix:
                 definition = self.build_matrix_definition(type_index, default_layout, last_struct)
 
             definition = definition or definitions_scalar.get(type_index)
@@ -106,13 +98,13 @@ class Shader(Destroyable):
 
             definitions_array[index] = Array(definition.copy(), dims, default_layout)
 
-        elif index in self.byte_code.types_struct:
-            member_indices = self.byte_code.types_struct[index]
+        elif index in self.data.types_struct:
+            member_indices = self.data.types_struct[index]
 
             # build missing definitions
             for member_index in member_indices:
-                is_struct = member_index in self.byte_code.types_struct
-                is_array = member_index in self.byte_code.types_array
+                is_struct = member_index in self.data.types_struct
+                is_array = member_index in self.data.types_array
 
                 defs = {
                     "definitions_scalar": definitions_scalar,
@@ -132,7 +124,7 @@ class Shader(Destroyable):
                 definition = None
 
                 # matrix types are shared, but still affected by the layout, create a instance for every occurrence
-                if member_index in self.byte_code.types_matrix:
+                if member_index in self.data.types_matrix:
                     definition = self.build_matrix_definition(member_index, default_layout, last_struct)
 
                 definition = definition or definitions_scalar.get(member_index)
@@ -141,7 +133,7 @@ class Shader(Destroyable):
                 definition = definition or definitions_struct.get(member_index)
                 definitions.append(definition.copy())
 
-            struct_name, member_names = self.byte_code.find_names(index)
+            struct_name, member_names = self.data.find_names(index)
             definitions_struct[index] = Struct(definitions, default_layout, member_names=member_names,
                                                type_name=struct_name)
 
@@ -153,8 +145,8 @@ class Shader(Destroyable):
         if last_struct_index is None:
             raise ByteCodeError.unexpected()
 
-        member_indices = self.byte_code.find_member_ids(last_struct_index)
-        member_orders = self.byte_code.find_orders(last_struct_index)
+        member_indices = self.data.find_member_ids(last_struct_index)
+        member_orders = self.data.find_orders(last_struct_index)
 
         # matrix is direct member of the last struct
         if matrix_index in member_indices:
@@ -166,8 +158,8 @@ class Shader(Destroyable):
             member = None
 
             for index in member_indices:
-                if index in self.byte_code.types_array:
-                    type_index, _ = self.byte_code.types_array[index]
+                if index in self.data.types_array:
+                    type_index, _ = self.data.types_array[index]
                     if type_index == matrix_index:
                         member = member_indices.index(index)
                         break
@@ -178,7 +170,7 @@ class Shader(Destroyable):
         order_decoration = member_orders[member]
         order = {Decoration.ROW_MAJOR: Order.ROW_MAJOR, Decoration.COL_MAJOR: Order.COLUMN_MAJOR}[order_decoration]
 
-        dtype, rows, cols = self.byte_code.types_matrix[matrix_index]
+        dtype, rows, cols = self.data.types_matrix[matrix_index]
         return Matrix(cols, rows, dtype, layout, order)
 
     def deduce_layout(self, binding):
@@ -218,8 +210,8 @@ class Shader(Destroyable):
     def check_layout(self, index):
         definition = self.definitions_block[index]
 
-        member_indices = self.byte_code.find_member_ids(index)
-        offsets_bytecode = self.byte_code.find_offsets(index)
+        member_indices = self.data.find_member_ids(index)
+        offsets_bytecode = self.data.find_offsets(index)
         offsets_bytecode = [offsets_bytecode.get(i) for i in range(len(definition.definitions))]
 
         if None in offsets_bytecode:
@@ -230,11 +222,11 @@ class Shader(Destroyable):
 
         for i, (member_index, d) in enumerate(zip(member_indices, definition.definitions)):
             if isinstance(d, Array):
-                if self.byte_code.find_strides(member_index) != d.strides():
+                if self.data.find_strides(member_index) != d.strides():
                     return False
 
             if isinstance(d, Matrix):
-                if self.byte_code.find_matrix_stride(index, i) != d.stride():
+                if self.data.find_matrix_stride(index, i) != d.stride():
                     return False
 
         return True
@@ -285,7 +277,7 @@ class Shader(Destroyable):
         if usage == BufferUsage.UNIFORM_BUFFER:
             return Access.READ_ONLY
 
-        decorations = self.byte_code.find_accesses(index)
+        decorations = self.data.find_accesses(index)
 
         if len(decorations) not in (0, len(block_definition.definitions)):  # 0 for no access decorations at all
             raise ByteCodeError.unexpected()
@@ -308,6 +300,3 @@ class Shader(Destroyable):
             raise ByteCodeError.unexpected()
 
         return accesses.pop()
-
-
-
