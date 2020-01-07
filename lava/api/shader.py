@@ -26,7 +26,22 @@ class Shader(Destroyable):
         self.byte_code = ByteCode(self.byte_code_data, entry_point)
 
     def get_entry_point(self):
-        return self.byte_code.entry_point
+        return self.byte_code.get_entry_point()
+
+    def get_bindings(self):
+        return self.byte_code.get_bindings()
+
+    def get_block_definition(self, binding):
+        return self.byte_code.get_block_definition(binding)
+
+    def get_block_usage(self, binding):
+        return self.byte_code.get_block_usage(binding)
+
+    def get_local_size(self):
+        return self.byte_code.get_local_size()
+
+    def get_block_access(self, binding):
+        return self.byte_code.get_block_access(binding)
 
     def _destroy(self):
         vk.vkDestroyShaderModule(self.device.handle, self.handle, None)

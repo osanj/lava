@@ -25,19 +25,19 @@ class Shader(Destroyable):
         self.vulkan_shader.destroy()
 
     def get_bindings(self):
-        return self.vulkan_shader.byte_code.get_bindings()
+        return self.vulkan_shader.get_bindings()
 
     def get_block_definition(self, binding):
-        return self.vulkan_shader.byte_code.get_block_definition(binding)
+        return self.vulkan_shader.get_block_definition(binding)
 
     def get_block_usage(self, binding):
-        return self.vulkan_shader.byte_code.get_block_usage(binding)
+        return self.vulkan_shader.get_block_usage(binding)
 
     def get_local_size(self):
-        return self.vulkan_shader.byte_code.get_local_size()
+        return self.vulkan_shader.get_local_size()
 
     def get_block_access(self, binding):
-        return self.vulkan_shader.byte_code.get_block_access(binding)
+        return self.vulkan_shader.get_block_access(binding)
 
 
 class Stage(Destroyable):
