@@ -17,14 +17,15 @@ class ByteCode(object):
         self.block_data = None
 
         # check / set entry point
-        self.entry_point, self.entry_point_index = self.check_entry_point(entry_point)
-        self.local_size = self.check_local_size(self.entry_point_index)
+        self.entry_point, self.entry_point_index = self.check_entry_point(self.data, entry_point)
+        self.local_size = self.check_local_size(self.data, self.entry_point_index)
 
         # off we go
         self.inspect()
 
-    def check_entry_point(self, entry_point):
-        entry_points_detected = self.data.find_entry_points(execution_model=ExecutionModel.GL_COMPUTE)
+    @classmethod
+    def check_entry_point(cls, byte_code_data, entry_point):
+        entry_points_detected = byte_code_data.find_entry_points(execution_model=ExecutionModel.GL_COMPUTE)
         index = None
 
         if len(entry_points_detected) == 0:
@@ -45,19 +46,14 @@ class ByteCode(object):
 
         return entry_point, index
 
-    def check_local_size(self, entry_point_index):
-        execution_mode, literals = self.data.find_entry_point_details(entry_point_index)
+    @classmethod
+    def check_local_size(cls, byte_code_data, entry_point_index):
+        execution_mode, literals = byte_code_data.find_entry_point_details(entry_point_index)
 
         if execution_mode != ExecutionMode.LOCAL_SIZE:
             raise LavaUnsupportedError("Unsupported execution mode {}".format(execution_mode))
 
         return literals
-
-    def get_entry_point(self):
-        return self.entry_point
-
-    def get_local_size(self):
-        return self.local_size
 
     def inspect(self):
         self.block_data = self.data.find_blocks()

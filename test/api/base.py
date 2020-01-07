@@ -67,6 +67,7 @@ class GlslBasedTest(unittest.TestCase):
     def run_program(cls, glsl, bytez_input, bytez_output_size, usage_input=BufferUsage.STORAGE_BUFFER,
                     usage_output=BufferUsage.STORAGE_BUFFER, groups=(1, 1, 1), verbose=True):
         shader = cls.shader_from_txt(glsl, verbose)
+        # shader.inspect()
         return cls.run_compiled_program(shader, bytez_input, bytez_output_size, usage_input, usage_output, groups)
 
     @classmethod

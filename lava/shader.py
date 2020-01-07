@@ -18,26 +18,26 @@ class Shader(Destroyable):
         super(Shader, self).__init__()
         self.session = session
         self.session.register_shader(self)
-        self.vulkan_shader = _Shader.from_file(self.session.device, path)
-        self.vulkan_shader.inspect(entry_point)
+        self.vulkan_shader = _Shader.from_file(self.session.device, path, entry_point)
+        self.vulkan_shader.inspect()
 
     def _destroy(self):
         self.vulkan_shader.destroy()
 
     def get_bindings(self):
-        return self.vulkan_shader.get_bindings()
+        return self.vulkan_shader.code.get_bindings()
 
     def get_block_definition(self, binding):
-        return self.vulkan_shader.get_block_definition(binding)
+        return self.vulkan_shader.code.get_block_definition(binding)
 
     def get_block_usage(self, binding):
-        return self.vulkan_shader.get_block_usage(binding)
+        return self.vulkan_shader.code.get_block_usage(binding)
 
     def get_local_size(self):
         return self.vulkan_shader.get_local_size()
 
     def get_block_access(self, binding):
-        return self.vulkan_shader.get_block_access(binding)
+        return self.vulkan_shader.code.get_block_access(binding)
 
 
 class Stage(Destroyable):
