@@ -4,22 +4,10 @@ import itertools
 import struct
 
 import lava.api.constants.spirv as spirv
-from lava.api.util import LavaError
+from lava.api.bytecode import ByteCodeError
 
 
-class ByteCodeError(LavaError):
-
-    UNEXPECTED = "Something unexpected happened"
-
-    def __init__(self, message):
-        super(ByteCodeError, self).__init__(message)
-
-    @classmethod
-    def unexpected(cls):
-        return cls(cls.UNEXPECTED)
-
-
-class ByteCode(object):
+class ByteCodeData(object):
     # https://www.khronos.org/registry/spir-v/specs/1.2/SPIRV.pdf
 
     def __init__(self, bytez):
@@ -324,7 +312,7 @@ class ByteCodeHeader(object):
 
     def __init__(self, bytez):
         self.bytez = bytez
-        magic_number, version, generator_magic_number, bound, _ = ByteCode.read_words(bytez, spirv.WORD_COUNT_HEADER)
+        magic_number, version, generator_magic_number, bound, _ = ByteCodeData.read_words(bytez, spirv.WORD_COUNT_HEADER)
 
         if magic_number != spirv.MAGIC_NUMBER:
             raise ByteCodeError("MagicNumber does not match SPIR-V specs")
@@ -342,7 +330,7 @@ class ByteCodeInstruction(object):
     # https://www.khronos.org/registry/spir-v/specs/1.2/SPIRV.pdf#subsection.2.3
 
     def __init__(self, bytez):
-        first_word = ByteCode.read_word(bytez)
+        first_word = ByteCodeData.read_word(bytez)
         self.word_count = first_word >> 16
         self.op_id = first_word & 0x0000FFFF
         self.bytez = bytez[:self.word_count * spirv.WORD_BYTE_SIZE]
@@ -374,8 +362,8 @@ class OpName(Op):
 
     def __init__(self, bytez):
         super(OpName, self).__init__(bytez)
-        self.target_id = ByteCode.read_word(bytez)
-        self.name = ByteCode.read_words_as_string(bytez, offset=1)
+        self.target_id = ByteCodeData.read_word(bytez)
+        self.name = ByteCodeData.read_words_as_string(bytez, offset=1)
 
     def describe(self):
         return "target_id={} name={}".format(self.target_id, self.name)
@@ -387,9 +375,9 @@ class OpMemberName(Op):
 
     def __init__(self, bytez):
         super(OpMemberName, self).__init__(bytez)
-        self.type_id = ByteCode.read_word(bytez)
-        self.member = ByteCode.read_word(bytez, offset=1)
-        self.name = ByteCode.read_words_as_string(bytez, offset=2)
+        self.type_id = ByteCodeData.read_word(bytez)
+        self.member = ByteCodeData.read_word(bytez, offset=1)
+        self.name = ByteCodeData.read_words_as_string(bytez, offset=2)
 
     def describe(self):
         return "type_id={} member_id={} name={}".format(self.type_id, self.member, self.name)
@@ -401,10 +389,10 @@ class OpEntryPoint(Op):
 
     def __init__(self, bytez):
         super(OpEntryPoint, self).__init__(bytez)
-        self.execution_model = spirv.ExecutionModel.from_spirv(ByteCode.read_word(bytez))
-        self.entry_point = ByteCode.read_word(bytez, offset=1)
-        self.name = ByteCode.read_words_as_string(bytez, n=1, offset=2)
-        self.ids = ByteCode.read_words(bytez, offset=3)
+        self.execution_model = spirv.ExecutionModel.from_spirv(ByteCodeData.read_word(bytez))
+        self.entry_point = ByteCodeData.read_word(bytez, offset=1)
+        self.name = ByteCodeData.read_words_as_string(bytez, n=1, offset=2)
+        self.ids = ByteCodeData.read_words(bytez, offset=3)
 
     def describe(self):
         return "execution_model={} entry_point={} name={} ids={}".format(self.execution_model, self.entry_point,
@@ -417,9 +405,9 @@ class OpExecutionMode(Op):
 
     def __init__(self, bytez):
         super(OpExecutionMode, self).__init__(bytez)
-        self.entry_point = ByteCode.read_word(bytez)
-        self.execution_mode = spirv.ExecutionMode.from_spirv(ByteCode.read_word(bytez, offset=1))
-        self.literals = ByteCode.read_words(bytez, offset=2)
+        self.entry_point = ByteCodeData.read_word(bytez)
+        self.execution_mode = spirv.ExecutionMode.from_spirv(ByteCodeData.read_word(bytez, offset=1))
+        self.literals = ByteCodeData.read_words(bytez, offset=2)
 
     def describe(self):
         return "entry_point={} execution_mode={} literals={}".format(self.entry_point, self.execution_mode,
@@ -432,9 +420,9 @@ class OpDecorate(Op):
 
     def __init__(self, bytez):
         super(OpDecorate, self).__init__(bytez)
-        self.target_id = ByteCode.read_word(bytez)
-        self.decoration = spirv.Decoration.from_spirv(ByteCode.read_word(bytez, offset=1))
-        self.literals = ByteCode.read_words(bytez, offset=2)
+        self.target_id = ByteCodeData.read_word(bytez)
+        self.decoration = spirv.Decoration.from_spirv(ByteCodeData.read_word(bytez, offset=1))
+        self.literals = ByteCodeData.read_words(bytez, offset=2)
 
     def describe(self):
         return "target_id={} decoration={} literals={}".format(self.target_id, self.decoration, self.literals)
@@ -446,10 +434,10 @@ class OpMemberDecorate(Op):
 
     def __init__(self, bytez):
         super(OpMemberDecorate, self).__init__(bytez)
-        self.type_id = ByteCode.read_word(bytez)
-        self.member = ByteCode.read_word(bytez, offset=1)
-        self.decoration = spirv.Decoration.from_spirv(ByteCode.read_word(bytez, offset=2))
-        self.literals = ByteCode.read_words(bytez, n=(len(bytez) // spirv.WORD_BYTE_SIZE - 3), offset=3)
+        self.type_id = ByteCodeData.read_word(bytez)
+        self.member = ByteCodeData.read_word(bytez, offset=1)
+        self.decoration = spirv.Decoration.from_spirv(ByteCodeData.read_word(bytez, offset=2))
+        self.literals = ByteCodeData.read_words(bytez, n=(len(bytez) // spirv.WORD_BYTE_SIZE - 3), offset=3)
 
     def describe(self):
         return "type_id={} member={} decoration={} literals={}".format(self.type_id, self.member, self.decoration,
@@ -462,7 +450,7 @@ class OpTypeVoid(Op):
 
     def __init__(self, bytez):
         super(OpTypeVoid, self).__init__(bytez)
-        self.result_id = ByteCode.read_word(bytez)
+        self.result_id = ByteCodeData.read_word(bytez)
 
     def describe(self):
         return "result_id={}".format(self.result_id)
@@ -474,7 +462,7 @@ class OpTypeBool(Op):
 
     def __init__(self, bytez):
         super(OpTypeBool, self).__init__(bytez)
-        self.result_id = ByteCode.read_word(bytez)
+        self.result_id = ByteCodeData.read_word(bytez)
 
     def describe(self):
         return "result_id={}".format(self.result_id)
@@ -486,9 +474,9 @@ class OpTypeInt(Op):
 
     def __init__(self, bytez):
         super(OpTypeInt, self).__init__(bytez)
-        self.result_id = ByteCode.read_word(bytez)
-        self.width = ByteCode.read_word(bytez, offset=1)
-        self.signedness = ByteCode.read_word(bytez, offset=2)
+        self.result_id = ByteCodeData.read_word(bytez)
+        self.width = ByteCodeData.read_word(bytez, offset=1)
+        self.signedness = ByteCodeData.read_word(bytez, offset=2)
 
     def describe(self):
         return "result_id={} width={} signedness={}".format(self.result_id, self.width, self.signedness)
@@ -500,8 +488,8 @@ class OpTypeFloat(Op):
 
     def __init__(self, bytez):
         super(OpTypeFloat, self).__init__(bytez)
-        self.result_id = ByteCode.read_word(bytez)
-        self.width = ByteCode.read_word(bytez, offset=1)
+        self.result_id = ByteCodeData.read_word(bytez)
+        self.width = ByteCodeData.read_word(bytez, offset=1)
 
     def describe(self):
         return "result_id={} width={}".format(self.result_id, self.width)
@@ -513,9 +501,9 @@ class OpTypeVector(Op):
 
     def __init__(self, bytez):
         super(OpTypeVector, self).__init__(bytez)
-        self.result_id = ByteCode.read_word(bytez)
-        self.component_type = ByteCode.read_word(bytez, offset=1)
-        self.component_count = ByteCode.read_word(bytez, offset=2)
+        self.result_id = ByteCodeData.read_word(bytez)
+        self.component_type = ByteCodeData.read_word(bytez, offset=1)
+        self.component_count = ByteCodeData.read_word(bytez, offset=2)
 
     def describe(self):
         return "result_id={} component_type={} component_count={}".format(self.result_id, self.component_type,
@@ -528,9 +516,9 @@ class OpTypeMatrix(Op):
 
     def __init__(self, bytez):
         super(OpTypeMatrix, self).__init__(bytez)
-        self.result_id = ByteCode.read_word(bytez)
-        self.column_type = ByteCode.read_word(bytez, offset=1)
-        self.column_count = ByteCode.read_word(bytez, offset=2)
+        self.result_id = ByteCodeData.read_word(bytez)
+        self.column_type = ByteCodeData.read_word(bytez, offset=1)
+        self.column_count = ByteCodeData.read_word(bytez, offset=2)
 
     def describe(self):
         return "result_id={} column_type={} column_count={}".format(self.result_id, self.column_type, self.column_count)
@@ -542,8 +530,8 @@ class OpTypeImage(Op):
 
     def __init__(self, bytez):
         super(OpTypeImage, self).__init__(bytez)
-        self.result_id = ByteCode.read_word(bytez)
-        self.sampled_type = ByteCode.read_word(bytez, offset=1)
+        self.result_id = ByteCodeData.read_word(bytez)
+        self.sampled_type = ByteCodeData.read_word(bytez, offset=1)
         # TODO: read out remaining 5 tons of information
 
     def describe(self):
@@ -556,7 +544,7 @@ class OpTypeSampler(Op):
 
     def __init__(self, bytez):
         super(OpTypeSampler, self).__init__(bytez)
-        self.result_id = ByteCode.read_word(bytez)
+        self.result_id = ByteCodeData.read_word(bytez)
 
     def describe(self):
         return "result_id={}".format(self.result_id)
@@ -568,9 +556,9 @@ class OpTypeArray(Op):
 
     def __init__(self, bytez):
         super(OpTypeArray, self).__init__(bytez)
-        self.result_id = ByteCode.read_word(bytez)
-        self.element_type = ByteCode.read_word(bytez, offset=1)
-        self.length = ByteCode.read_word(bytez, offset=2)
+        self.result_id = ByteCodeData.read_word(bytez)
+        self.element_type = ByteCodeData.read_word(bytez, offset=1)
+        self.length = ByteCodeData.read_word(bytez, offset=2)
 
     def describe(self):
         return "result_id={} element_type={} length={}".format(self.result_id, self.element_type, self.length)
@@ -582,8 +570,8 @@ class OpTypeRuntimeArray(Op):
 
     def __init__(self, bytez):
         super(OpTypeRuntimeArray, self).__init__(bytez)
-        self.result_id = ByteCode.read_word(bytez)
-        self.element_type = ByteCode.read_word(bytez, offset=1)
+        self.result_id = ByteCodeData.read_word(bytez)
+        self.element_type = ByteCodeData.read_word(bytez, offset=1)
 
     def describe(self):
         return "result_id={} element_type={}".format(self.result_id, self.element_type)
@@ -595,8 +583,8 @@ class OpTypeStruct(Op):
 
     def __init__(self, bytez):
         super(OpTypeStruct, self).__init__(bytez)
-        self.result_id = ByteCode.read_word(bytez)
-        self.member_types = ByteCode.read_words(bytez, offset=1)
+        self.result_id = ByteCodeData.read_word(bytez)
+        self.member_types = ByteCodeData.read_words(bytez, offset=1)
 
     def describe(self):
         return "result_id={} member_types={}".format(self.result_id, self.member_types)
@@ -608,8 +596,8 @@ class OpSource(Op):
 
     def __init__(self, bytez):
         super(OpSource, self).__init__(bytez)
-        self.source_language = spirv.SourceLanguage.from_spirv(ByteCode.read_word(bytez))
-        self.version = ByteCode.read_word(bytez, offset=1)
+        self.source_language = spirv.SourceLanguage.from_spirv(ByteCodeData.read_word(bytez))
+        self.version = ByteCodeData.read_word(bytez, offset=1)
         # ignore other attributes
 
     def describe(self):
@@ -622,7 +610,7 @@ class OpSourceExtension(Op):
 
     def __init__(self, bytez):
         super(OpSourceExtension, self).__init__(bytez)
-        self.extension = ByteCode.read_words_as_string(bytez)
+        self.extension = ByteCodeData.read_words_as_string(bytez)
 
     def describe(self):
         return "extension={}".format(self.extension)
@@ -634,9 +622,9 @@ class OpTypePointer(Op):
 
     def __init__(self, bytez):
         super(OpTypePointer, self).__init__(bytez)
-        self.result_id = ByteCode.read_word(bytez)
-        self.storage_class = spirv.StorageClass.from_spirv(ByteCode.read_word(bytez, offset=1))
-        self.type_id = ByteCode.read_word(bytez, offset=2)
+        self.result_id = ByteCodeData.read_word(bytez)
+        self.storage_class = spirv.StorageClass.from_spirv(ByteCodeData.read_word(bytez, offset=1))
+        self.type_id = ByteCodeData.read_word(bytez, offset=2)
 
     def describe(self):
         return "result_id={} storage_class={} type_id={}".format(self.result_id, self.storage_class, self.type_id)
@@ -648,9 +636,9 @@ class OpVariable(Op):
 
     def __init__(self, bytez):
         super(OpVariable, self).__init__(bytez)
-        self.result_type = ByteCode.read_word(bytez)
-        self.result_id = ByteCode.read_word(bytez, offset=1)
-        self.storage_class = spirv.StorageClass.from_spirv(ByteCode.read_word(bytez, offset=2))
+        self.result_type = ByteCodeData.read_word(bytez)
+        self.result_id = ByteCodeData.read_word(bytez, offset=1)
+        self.storage_class = spirv.StorageClass.from_spirv(ByteCodeData.read_word(bytez, offset=2))
         # self.initializer = ... (optional)
 
     def describe(self):
@@ -664,9 +652,9 @@ class OpConstant(Op):
 
     def __init__(self, bytez):
         super(OpConstant, self).__init__(bytez)
-        self.result_type = ByteCode.read_word(bytez)
-        self.result_id = ByteCode.read_word(bytez, offset=1)
-        self.literals = ByteCode.read_words(bytez, offset=2)
+        self.result_type = ByteCodeData.read_word(bytez)
+        self.result_id = ByteCodeData.read_word(bytez, offset=1)
+        self.literals = ByteCodeData.read_words(bytez, offset=2)
         # self.initializer = ... (optional)
 
     def describe(self):

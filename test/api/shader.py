@@ -100,35 +100,35 @@ class TestByteCodeInspection(GlslBasedTest):
 
         shader.inspect()
 
-        print(shader.byte_code)
+        print(shader.code.data)
 
         print("")
         print("scalars")
-        print(shader.byte_code.types_scalar)
+        print(shader.code.data.types_scalar)
         print("")
         print("vectors")
-        print(shader.byte_code.types_vector)
+        print(shader.code.data.types_vector)
         print("")
         print("matrices")
-        print(shader.byte_code.types_matrix)
+        print(shader.code.data.types_matrix)
         print("")
         print("array")
-        print(shader.byte_code.types_array)
+        print(shader.code.data.types_array)
         print("")
         print("struct")
-        print(shader.byte_code.types_struct)
+        print(shader.code.data.types_struct)
         print("")
         print("names")
         names = []
-        for idx in shader.byte_code.types_struct:
-            struct_name, member_names = shader.byte_code.find_names(idx)
-            offsets = shader.byte_code.find_offsets(idx)
+        for idx in shader.code.data.types_struct:
+            struct_name, member_names = shader.code.data.find_names(idx)
+            offsets = shader.code.data.find_offsets(idx)
             names.append("  {}) {} {{ {} }}".format(idx, struct_name, ", ".join(
                 ["{}({})".format(mname, offsets.get(i)) for i, mname in enumerate(member_names)])))
         print("\n".join(names))
         print("")
         print("blocks")
-        print(shader.byte_code.find_blocks())
+        print(shader.code.data.find_blocks())
         print("")
 
     def test_detection_type_nested_with_structs(self):
@@ -156,7 +156,7 @@ class TestByteCodeInspection(GlslBasedTest):
             shader = self.shader_from_txt(glsl, verbose=False)
             shader.inspect()
 
-            definition, _ = shader.get_block(0)
+            definition, _ = shader.code.get_block(0)
             self.assertTrue(container.compare(definition, quiet=True))
 
     def test_detection_type_arrays(self):
@@ -171,7 +171,7 @@ class TestByteCodeInspection(GlslBasedTest):
             shader = self.shader_from_txt(glsl, verbose=False)
             shader.inspect()
 
-            detected_definition, _ = shader.get_block(0)
+            detected_definition, _ = shader.code.get_block(0)
             self.assertTrue(container.compare(detected_definition, quiet=True))
 
             if isinstance(definition, Vector):
@@ -190,7 +190,7 @@ class TestByteCodeInspection(GlslBasedTest):
             shader = self.shader_from_txt(glsl, verbose=False)
             shader.inspect()
 
-            detected_definition, _ = shader.get_block(0)
+            detected_definition, _ = shader.code.get_block(0)
             self.assertTrue(container.compare(detected_definition, quiet=True))
 
     def test_detection_type_bools(self):
@@ -224,7 +224,7 @@ class TestByteCodeInspection(GlslBasedTest):
             shader = self.shader_from_txt(glsl.format(layout=layout), verbose=False)
             shader.inspect()
 
-            detected_definition, _ = shader.get_block(0)
+            detected_definition, _ = shader.code.get_block(0)
             equal = expected_definition.compare(detected_definition, quiet=True)
             self.assertTrue(equal)
 
@@ -244,7 +244,7 @@ class TestByteCodeInspection(GlslBasedTest):
             shader = self.shader_from_txt(glsl, verbose=False)
             shader.inspect()
 
-            definition, detected_usage = shader.get_block(binding)
+            definition, detected_usage = shader.code.get_block(binding)
 
             self.assertEqual(detected_usage, usage)
             self.assertEqual(definition.layout, Layout.STDXXX)
@@ -260,7 +260,7 @@ class TestByteCodeInspection(GlslBasedTest):
         shader = self.shader_from_txt(glsl, verbose=False)
         shader.inspect()
 
-        definition, detected_usage = shader.get_block(binding)
+        definition, detected_usage = shader.code.get_block(binding)
 
         self.assertEqual(detected_usage, usage)
         self.assertEqual(definition.layout, Layout.STD140)  # uniform buffer objects can not use std430
@@ -285,7 +285,7 @@ class TestByteCodeInspection(GlslBasedTest):
         shader = self.shader_from_txt(glsl, verbose=False)
         shader.inspect()
 
-        definition, _ = shader.get_block(0)
+        definition, _ = shader.code.get_block(0)
         self.assertListEqual(definition.member_names, ["var{}".format(i) for i in range(1, 8)])
 
     def test_detection_binding(self):
@@ -296,7 +296,7 @@ class TestByteCodeInspection(GlslBasedTest):
             shader = self.shader_from_txt(glsl, verbose=False)
             shader.inspect()
 
-            detected_definition, detected_usage = shader.get_block(binding)
+            detected_definition, detected_usage = shader.code.get_block(binding)
 
             self.assertEqual(detected_usage, usage)
             equal = container.compare(detected_definition, quiet=True)
@@ -333,8 +333,8 @@ class TestByteCodeInspection(GlslBasedTest):
         shader = self.shader_from_txt(glsl, verbose=False)
         shader.inspect()
 
-        definition0, _ = shader.get_block(0)
-        definition1, _ = shader.get_block(1)
+        definition0, _ = shader.code.get_block(0)
+        definition1, _ = shader.code.get_block(1)
         self.assertTrue(container_std140.compare(definition0, quiet=True))
         self.assertFalse(container_std140.compare(definition1, quiet=True))
         self.assertFalse(container_std430.compare(definition0, quiet=True))

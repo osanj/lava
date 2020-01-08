@@ -60,11 +60,11 @@ class CombinedTest(GlslBasedTest):
             shader = self.shader_from_txt(glsl, verbose=False)
             shader.inspect()
 
-            cache_in = ByteCache(shader.get_block_definition(0))
+            cache_in = ByteCache(shader.code.get_block_definition(0))
             cache_in["imageIn"] = im
             bytez_in = cache_in.definition.to_bytes(cache_in.get_as_dict())
 
-            cache_out = ByteCache(shader.get_block_definition(1))
+            cache_out = ByteCache(shader.code.get_block_definition(1))
             bytez_out_count = cache_out.definition.size()
             bytez_out = self.run_compiled_program(shader, bytez_in, bytez_out_count, groups=im.shape)
             cache_out.set_from_dict(cache_out.definition.from_bytes(bytez_out))
@@ -112,11 +112,11 @@ class CombinedTest(GlslBasedTest):
             shader = self.shader_from_txt(glsl, verbose=False)
             shader.inspect()
 
-            cache_in = ByteCache(shader.get_block_definition(0))
+            cache_in = ByteCache(shader.code.get_block_definition(0))
             cache_in["imageIn"] = im
             bytez_in = cache_in.definition.to_bytes(cache_in.get_as_dict())
 
-            cache_out = ByteCache(shader.get_block_definition(1))
+            cache_out = ByteCache(shader.code.get_block_definition(1))
             bytez_out_count = cache_out.definition.size()
             bytez_out = self.run_compiled_program(shader, bytez_in, bytez_out_count, groups=(h, w, 1))
             cache_out.set_from_dict(cache_out.definition.from_bytes(bytez_out))
@@ -172,11 +172,11 @@ class CombinedTest(GlslBasedTest):
             shader = self.shader_from_txt(glsl, verbose=False)
             shader.inspect()
 
-            cache_in = ByteCache(shader.get_block_definition(0))
+            cache_in = ByteCache(shader.code.get_block_definition(0))
             cache_in["dataIn"] = mat
             bytez_in = cache_in.definition.to_bytes(cache_in.get_as_dict())
 
-            cache_out = ByteCache(shader.get_block_definition(1))
+            cache_out = ByteCache(shader.code.get_block_definition(1))
             bytez_out_count = cache_out.definition.size()
             bytez_out = self.run_compiled_program(shader, bytez_in, bytez_out_count, groups=(h, w, 1))
             cache_out.set_from_dict(cache_out.definition.from_bytes(bytez_out))
@@ -223,11 +223,11 @@ class CombinedTest(GlslBasedTest):
             shader = self.shader_from_txt(glsl, verbose=False)
             shader.inspect()
 
-            cache_in = ByteCache(shader.get_block_definition(0))
+            cache_in = ByteCache(shader.code.get_block_definition(0))
             cache_in["matrixIn"] = mat
             bytez_in = cache_in.definition.to_bytes(cache_in.get_as_dict())
 
-            cache_out = ByteCache(shader.get_block_definition(1))
+            cache_out = ByteCache(shader.code.get_block_definition(1))
             bytez_out_count = cache_out.definition.size()
             bytez_out = self.run_compiled_program(shader, bytez_in, bytez_out_count)
             cache_out.set_from_dict(cache_out.definition.from_bytes(bytez_out))
@@ -281,7 +281,7 @@ class CombinedTest(GlslBasedTest):
             shader = self.shader_from_txt(glsl, verbose=False)
             shader.inspect()
 
-            cache_in = ByteCache(shader.get_block_definition(0))
+            cache_in = ByteCache(shader.code.get_block_definition(0))
 
             for i, member in enumerate(members):
                 if isinstance(member, Scalar):
@@ -295,7 +295,7 @@ class CombinedTest(GlslBasedTest):
 
             bytez_in = cache_in.definition.to_bytes(cache_in.get_as_dict())
 
-            cache_out = ByteCache(shader.get_block_definition(1))
+            cache_out = ByteCache(shader.code.get_block_definition(1))
             bytez_out_count = cache_out.definition.size()
             bytez_out = self.run_compiled_program(shader, bytez_in, bytez_out_count)
             cache_out.set_from_dict(cache_out.definition.from_bytes(bytez_out))
@@ -345,7 +345,7 @@ class CombinedTest(GlslBasedTest):
             shader = self.shader_from_txt(glsl, verbose=False)
             shader.inspect()
 
-            cache_in = ByteCache(shader.get_block_definition(0))
+            cache_in = ByteCache(shader.code.get_block_definition(0))
             m = 1 if dtype == "bool" else cache_in.definition.definitions[0].length()
 
             if m == 1:
@@ -359,7 +359,7 @@ class CombinedTest(GlslBasedTest):
             cache_in["dataArrayIn"] = data_array_in
             bytez_in = cache_in.definition.to_bytes(cache_in.get_as_dict())
 
-            cache_out = ByteCache(shader.get_block_definition(1))
+            cache_out = ByteCache(shader.code.get_block_definition(1))
             bytez_out_count = cache_out.definition.size()
             bytez_out = self.run_compiled_program(shader, bytez_in, bytez_out_count)
             cache_out.set_from_dict(cache_out.definition.from_bytes(bytez_out))

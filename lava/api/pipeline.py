@@ -25,9 +25,10 @@ class Pipeline(Destroyable):
         self.descriptor_set_layout_handle = vk.vkCreateDescriptorSetLayout(self.device.handle,
                                                                            descriptor_layout_create_info, None)
 
+        entrypoint = shader.get_entry_point().encode("ascii")
         shader_stage_create_info = vk.VkPipelineShaderStageCreateInfo(stage=vk.VK_SHADER_STAGE_COMPUTE_BIT,
                                                                       module=shader.handle,
-                                                                      pName=shader.get_entry_point().encode("ascii"))
+                                                                      pName=entrypoint)
 
         if len(push_constants) > 0:
             if len(push_constants) > 1:

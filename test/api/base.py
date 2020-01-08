@@ -42,7 +42,7 @@ class GlslBasedTest(unittest.TestCase):
     def shader_from_txt(cls, txt, verbose=True, clean_up=True):
         path_shader = write_to_temp_file(txt, suffix=".comp")
         shader_path_spirv = lv.compile_glsl(path_shader, verbose)
-        shader = Shader(cls.SESSION.device, shader_path_spirv)
+        shader = Shader.from_file(cls.SESSION.device, shader_path_spirv)
         if clean_up:
             os.remove(path_shader)
             os.remove(shader_path_spirv)
