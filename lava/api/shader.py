@@ -1,8 +1,8 @@
 # -*- coding: UTF-8 -*-
 
 import lava.api.vulkan as vk
-from lava.api.bytecode.instruction import ByteCodeData
-from lava.api.bytecode.interpreter import ByteCode
+from lava.api.bytecode.logical import ByteCode
+from lava.api.bytecode.physical import ByteCodeData
 from lava.api.util import Destroyable
 
 

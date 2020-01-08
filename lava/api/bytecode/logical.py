@@ -1,6 +1,6 @@
 # -*- coding: UTF-8 -*-
 
-from lava.api.bytecode.instruction import ByteCodeError
+from lava.api.bytecode import ByteCodeError
 from lava.api.bytes import Array, Matrix, Scalar, Struct, Vector
 from lava.api.constants.spirv import Access, Decoration, ExecutionMode, ExecutionModel, Layout, Order, StorageClass
 from lava.api.constants.vk import BufferUsage
