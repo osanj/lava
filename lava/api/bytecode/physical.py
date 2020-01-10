@@ -29,6 +29,12 @@ class ByteCodeData(object):
         self.types_struct = self.find_struct_types()
 
     @classmethod
+    def from_file(cls, path):
+        with open(path, "rb") as f:
+            bytez = f.read()
+        return cls(bytez)
+
+    @classmethod
     def read_word(cls, bytez, offset=0):
         # word to unsigned integer
         return cls.read_words(bytez, n=1, offset=offset)[0]

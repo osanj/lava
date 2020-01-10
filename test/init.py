@@ -6,6 +6,8 @@ import os
 import sys
 import unittest
 
+from test.util import write_to_temp_file
+
 
 class InitializationTest(unittest.TestCase):
 
@@ -123,3 +125,54 @@ class InitializationTest(unittest.TestCase):
         self.assertFalse(lv.initialized())
 
         builtins.__import__ = import_original
+
+    def test_bytecode_parsing_without_gpu(self):
+        with self.env_backup():
+            del os.environ["VULKAN_SDK"]
+
+            import lava as lv
+            from lava.api.bytecode.logical import ByteCode
+            from lava.api.bytecode.physical import ByteCodeData
+            from lava.api.bytes import Vector, Scalar, Struct
+            from lava.api.constants.spirv import Layout
+
+            self.assertTrue(not lv.initialized())
+
+        glsl = """
+            #version 450
+            #extension GL_ARB_separate_shader_objects : enable
+
+            layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
+
+            layout(std430, binding = 0) readonly buffer bufIn {
+                vec3 var1;
+            };
+
+            layout(std430, binding = 1) writeonly buffer bufOut {
+                float var2;
+            };
+
+            void main() {
+                var2 = var1.x + var1.y + var1.z;
+            }
+            """
+
+        path_shader = write_to_temp_file(glsl, suffix=".comp")
+        path_shader_spirv = lv.compile_glsl(path_shader, verbose=True)
+
+        with self.env_backup():
+            del os.environ["VULKAN_SDK"]
+
+            self.assertTrue(not lv.initialized())
+
+            byte_code_data = ByteCodeData.from_file(path_shader_spirv)
+            byte_code = ByteCode(byte_code_data, None)
+
+            quiet = True
+            container0 = Struct([Vector.vec3()], Layout.STD430)
+            container1 = Struct([Scalar.float()], Layout.STD430)
+            self.assertTrue(container0.compare(byte_code.get_block_definition(0), quiet=quiet))
+            self.assertTrue(container1.compare(byte_code.get_block_definition(1), quiet=quiet))
+
+        os.remove(path_shader)
+        os.remove(path_shader_spirv)
