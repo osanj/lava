@@ -5,7 +5,8 @@ import unittest
 
 import numpy as np
 
-from lava.api.bytes import Array, ByteCache, Vector, Scalar, Struct
+from lava.api.bytes import Array, Vector, Scalar, Struct
+from lava.api.cache import ByteCache
 from lava.api.constants.spirv import Layout, Order
 from lava.api.constants.vk import BufferUsage
 

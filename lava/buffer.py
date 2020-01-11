@@ -2,7 +2,8 @@
 
 import warnings
 
-from lava.api.bytes import ByteCache, Struct
+from lava.api.bytes import Struct
+from lava.api.cache import ByteCache
 from lava.api.constants.spirv import Access
 from lava.api.constants.vk import BufferUsage, MemoryType
 from lava.api.memory import Buffer as _Buffer

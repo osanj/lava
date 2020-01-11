@@ -121,7 +121,7 @@ class BufferTest(unittest.TestCase):
             if sync_mode is lv.BufferCPU.SYNC_LAZY:
                 self.assertTrue(buffer_out.is_synced())
 
-    def test_partially_modified_buffer(self):
+    def test_detection_of_partially_modified_buffer(self):
         glsl = """
             #version 450
             #extension GL_ARB_separate_shader_objects : enable
@@ -209,6 +209,49 @@ class BufferTest(unittest.TestCase):
 
             self.assertEqual(buffer_in["var1"], new_value)
             self.assertEqual(buffer_out["var1"], new_value)
+
+    def test_update_of_partially_modified_buffer(self):
+        glsl = """
+            #version 450
+            #extension GL_ARB_separate_shader_objects : enable
+
+            layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
+            
+            struct Struct1 {
+                uint var1;
+                uint var2;
+            };
+            
+            struct Struct2 {
+                double var1;
+                Struct1[2] var2;
+            };
+
+            layout(std140, binding = 0) buffer readonly BufferA {
+                float var1;
+                Struct2 var2;
+                vec2[3] var3;
+            } inputData;
+            
+            layout(std140, binding = 1) buffer writeonly BufferB {
+                float var1;
+                Struct2 var2;
+                vec2[3] var3;
+            } outputData;
+
+            void main() {
+                outputData.var1 = inputData.var1;
+                outputData.var2 = inputData.var2;
+                outputData.var3 = inputData.var3;
+            }
+            """
+
+        # things to consider:
+        # * ByteCache already has fine grained dirty setting
+        # * special attention necessary for scalar arrays, anyway
+        # * make optional (also for testing purposes)
+
+        pass
 
 # more tests:
 # missing readonly, writeonly decorations

@@ -5,7 +5,8 @@ import unittest
 
 import numpy as np
 
-from lava.api.bytes import ByteCache, Matrix, Scalar, Struct, Vector
+from lava.api.bytes import Matrix, Scalar, Vector
+from lava.api.cache import ByteCache
 from lava.api.constants.spirv import DataType, Layout, Order
 
 from test.api.base import GlslBasedTest
