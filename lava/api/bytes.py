@@ -335,6 +335,9 @@ class Vector(ByteRepresentation):
     def __str__(self, name=None, indent=2):
         return "{} [{}]".format(self.glsl_dtype(), name or "?")
 
+    def numpy_dtype(self):
+        return self.scalar.numpy_dtype()
+
     def glsl_dtype(self):
         return "{}vec{}".format(self.dtype.lower()[0] if self.dtype is not DataType.FLOAT else "", self.n)
 
@@ -437,6 +440,9 @@ class Matrix(ByteRepresentation):
     def __str__(self, name=None, indent=2):
         return "{} [{}]".format(self.glsl_dtype(), name or "?")
 
+    def numpy_dtype(self):
+        return Scalar.of(self.dtype).numpy_dtype()
+
     def glsl_dtype(self):
         return "{}mat{}x{}".format(self.dtype.lower()[0] if self.dtype is not DataType.FLOAT else "", self.cols, self.rows)
 
@@ -532,6 +538,13 @@ class Array(ByteRepresentation):
 
     def shape(self):
         return self.dims
+
+    def shape_extended(self):
+        if isinstance(self.definition, Vector):
+            return tuple(list(self.shape()) + [self.definition.length()])
+        if isinstance(self.definition, Matrix):
+            return tuple(list(self.shape()) + list(self.definition.shape()))
+        return self.shape()
 
     def copy(self):
         return Array(self.definition.copy(), self.dims, self.layout)
@@ -633,7 +646,7 @@ class Array(ByteRepresentation):
     def to_bytes_for_vectors(self, array, path):
         numpy_dtypes = self.definition.scalar.input_dtypes
         transfer_dtype = self.definition.scalar.numpy_dtype()
-        shape = tuple(list(self.shape()) + [self.definition.length()])
+        shape = self.shape_extended()
 
         if not isinstance(array, np.ndarray):
             raise TypeError("Got datatype {} for {} variable, expected {} at {}"
@@ -656,7 +669,7 @@ class Array(ByteRepresentation):
 
     def to_bytes_for_matrices(self, array, path):
         numpy_dtype = self.definition.vector.scalar.numpy_dtype()
-        shape = tuple(list(self.shape()) + list(self.definition.shape()))
+        shape = self.shape_extended()
 
         if not isinstance(array, np.ndarray):
             raise RuntimeError("Got datatype {} for {} variable, expected {} at {}"

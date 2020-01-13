@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from lava.api.bytes import BytesError, ByteRepresentation, Struct, Array
+from lava.api.bytes import BytesError, ByteRepresentation, Scalar, Vector, Matrix, Array, Struct
 from lava.api.util import NdArray
 
 
@@ -62,6 +62,34 @@ class ByteCache(object):
 
             else:
                 self.values[d] = values[d]
+
+    def set_defaults(self):
+        for d in self.definition.definitions:
+            if isinstance(d, Struct):
+                self.values[d].set_defaults()
+
+            elif isinstance(d, Array):
+                if isinstance(d.definition, Struct):
+                    for indices in NdArray.iterate(d.shape()):
+                        NdArray.get(self.values[d], indices).set_defaults()
+
+                elif isinstance(d.definition, (Scalar, Vector, Matrix)):
+                    self.values[d] = np.zeros(d.shape_extended(), dtype=d.definition.numpy_dtype())
+
+                else:
+                    raise RuntimeError()
+
+            elif isinstance(d, Matrix):
+                self.values[d] = np.zeros(d.shape(), dtype=d.numpy_dtype())
+
+            elif isinstance(d, Vector):
+                self.values[d] = np.zeros(d.length(), dtype=d.numpy_dtype())
+
+            elif isinstance(d, Scalar):
+                self.values[d] = d.numpy_dtype()(0)
+
+            else:
+                raise RuntimeError()
 
     def set_dirty(self, dirty, include_children=True):
         self.dirty = dirty
