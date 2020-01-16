@@ -48,6 +48,9 @@ class ByteRepresentation(object):
     def glsl_dtype(self):
         raise NotImplementedError()
 
+    def array_based(self):
+        raise NotImplementedError()
+
     @classmethod
     def path_to_str(cls, path):
         return " > ".join(path)
@@ -151,6 +154,9 @@ class Scalar(ByteRepresentation):
 
     def glsl_dtype(self):
         raise NotImplementedError()
+
+    def array_based(self):
+        return False
 
     def compare(self, other, path=(), quiet=True):
         return self.compare_type(type(self), type(other), path, quiet)
@@ -341,6 +347,9 @@ class Vector(ByteRepresentation):
     def glsl_dtype(self):
         return "{}vec{}".format(self.dtype.lower()[0] if self.dtype is not DataType.FLOAT else "", self.n)
 
+    def array_based(self):
+        return True
+
     def compare(self, other, path=(), quiet=True):
         if not self.compare_type(type(self), type(other), path, quiet):
             return False
@@ -445,6 +454,9 @@ class Matrix(ByteRepresentation):
 
     def glsl_dtype(self):
         return "{}mat{}x{}".format(self.dtype.lower()[0] if self.dtype is not DataType.FLOAT else "", self.cols, self.rows)
+
+    def array_based(self):
+        return True
 
     def compare(self, other, path=(), quiet=True):
         if not self.compare_type(type(self), type(other), path, quiet):
@@ -584,6 +596,9 @@ class Array(ByteRepresentation):
 
     def glsl_dtype(self):
         return ("{}" + "[{}]" * len(self.shape())).format(self.definition.glsl_dtype(), *self.shape())
+
+    def array_based(self):
+        return isinstance(self.definition, (Scalar, Vector, Matrix))
 
     def compare(self, other, path=(), quiet=True):
         if not self.compare_type(type(self), type(other), path, quiet):
@@ -832,6 +847,9 @@ class Struct(ByteRepresentation):
         if self.type_name is None:
             raise BytesError("Type name was not defined for structure")
         return self.type_name
+
+    def array_based(self):
+        return False
 
     def __extend_path(self, path, member_index):
         if self.member_names[member_index]:

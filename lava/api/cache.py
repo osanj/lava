@@ -6,6 +6,44 @@ from lava.api.bytes import BytesError, ByteRepresentation, Scalar, Vector, Matri
 from lava.api.util import NdArray
 
 
+class NdArrayWrapper(object):
+
+    def __init__(self, array=None, dirty=False):
+        self.__array = array
+        self.dirty = dirty
+
+    def __getattribute__(self, name):
+        try:
+            attr = super(NdArrayWrapper, self).__getattribute__(name)
+        except AttributeError as e:
+            if hasattr(self.__array, name):
+                msg = "'{cls}' wraps a numpy array, if you want to access it directly call .unwrap()"\
+                    .format(cls=self.__class__.__name__)
+                raise AttributeError(msg)
+            else:
+                raise e
+        else:
+            return attr
+
+    @property
+    def empty(self):
+        return self.__array is None
+
+    @property
+    def shape(self):
+        return self.__array.shape
+
+    def unwrap(self):
+        return self.__array
+
+    def __getitem__(self, key):
+        return self.__array[key]
+
+    def __setitem__(self, key, value):
+        self.__array[key] = value
+        self.dirty = True
+
+
 class ByteCache(object):
 
     def __init__(self, definition):
@@ -17,6 +55,9 @@ class ByteCache(object):
 
         for i, d in enumerate(self.definition.definitions):
             value = None
+
+            if d.array_based():
+                value = NdArrayWrapper()
 
             if isinstance(d, Struct):
                 value = ByteCache(d)
@@ -98,6 +139,9 @@ class ByteCache(object):
             for d in self.definition.definitions:
                 value = self.values[d]
 
+                if isinstance(value, NdArrayWrapper):
+                    value.dirty = dirty
+
                 if isinstance(d, Struct):
                     value.set_dirty(dirty, include_children)
 
@@ -116,6 +160,9 @@ class ByteCache(object):
                 return True
 
             value = self.values[d]
+
+            if isinstance(value, NdArrayWrapper):
+                dirty = dirty or value.dirty
 
             if isinstance(d, Struct):
                 dirty = dirty or value.is_dirty(include_children)
@@ -160,5 +207,8 @@ class ByteCache(object):
         return self.values[self.__definition_from_key(key)]
 
     def __setitem__(self, key, value):
-        self.values[self.__definition_from_key(key)] = value
+        d = self.__definition_from_key(key)
+        if d.array_based() and not isinstance(value, NdArrayWrapper):
+            value = NdArrayWrapper(value, dirty=True)
+        self.values[d] = value
         self.dirty = True
