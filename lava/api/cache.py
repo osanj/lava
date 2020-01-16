@@ -77,6 +77,9 @@ class ByteCache(object):
         for d in self.definition.definitions:
             value = self.values[d]
 
+            if isinstance(value, NdArrayWrapper):
+                value = value.unwrap()
+
             if isinstance(d, Struct):
                 value = self.values[d].get_as_dict()
 
@@ -101,6 +104,9 @@ class ByteCache(object):
                     value = NdArray.get(values[d], indices)
                     cache = NdArray.get(self.values[d], indices)
                     cache.set_from_dict(value)
+
+            elif d.array_based():
+                self.values[d] = NdArrayWrapper(values[d])
 
             else:
                 self.values[d] = values[d]
