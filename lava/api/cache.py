@@ -51,7 +51,7 @@ class ByteCache(object):
             raise BytesError("ByteCaches can only be initialized with struct definitions")
         self.definition = definition
         self.values = {}
-        self.dirty = False
+        self.dirty = {}
 
         for i, d in enumerate(self.definition.definitions):
             value = None
@@ -69,6 +69,7 @@ class ByteCache(object):
                     NdArray.assign(value, indices, ByteCache(d.definition))
 
             self.values[d] = value
+            self.dirty[d] = False
 
     def get_as_dict(self):
         data = {}
@@ -132,44 +133,40 @@ class ByteCache(object):
             else:
                 raise RuntimeError()
 
-    def set_dirty(self, dirty, include_children=True):
-        self.dirty = dirty
+    def set_dirty(self, dirty):
+        for d in self.definition.definitions:
+            self.dirty[d] = dirty
+            value = self.values[d]
 
-        if include_children:
-            for d in self.definition.definitions:
-                value = self.values[d]
+            if isinstance(value, NdArrayWrapper):
+                value.dirty = dirty
 
-                if isinstance(value, NdArrayWrapper):
-                    value.dirty = dirty
+            if isinstance(d, Struct):
+                value.set_dirty(dirty)
 
-                if isinstance(d, Struct):
-                    value.set_dirty(dirty, include_children)
+            if Array.is_array_of_structs(d):
+                for indices in NdArray.iterate(d.shape()):
+                    NdArray.get(value, indices).set_dirty(dirty)
 
-                if Array.is_array_of_structs(d):
-                    for indices in NdArray.iterate(d.shape()):
-                        NdArray.get(value, indices).set_dirty(dirty, include_children)
-
-    def is_dirty(self, include_children=True):
-        if not include_children:
-            return self.dirty
-
-        dirty = self.dirty
+    def is_dirty(self):
+        dirty = False
 
         for d in self.definition.definitions:
-            if dirty:
-                return True
-
+            dirty = self.dirty[d]
             value = self.values[d]
 
             if isinstance(value, NdArrayWrapper):
                 dirty = dirty or value.dirty
 
             if isinstance(d, Struct):
-                dirty = dirty or value.is_dirty(include_children)
+                dirty = dirty or value.is_dirty()
 
             if Array.is_array_of_structs(d):
                 for indices in NdArray.iterate(d.shape()):
-                    dirty = dirty or NdArray.get(value, indices).is_dirty(include_children)
+                    dirty = dirty or NdArray.get(value, indices).is_dirty()
+
+            if dirty:
+                return True
 
         return dirty
 
@@ -211,4 +208,4 @@ class ByteCache(object):
         if d.array_based() and not isinstance(value, NdArrayWrapper):
             value = NdArrayWrapper(value, dirty=True)
         self.values[d] = value
-        self.dirty = True
+        self.dirty[d] = True
