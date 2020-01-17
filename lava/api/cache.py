@@ -25,16 +25,15 @@ class NdArrayWrapper(object):
         else:
             return attr
 
-    @property
-    def empty(self):
-        return self.__array is None
+    def __str__(self):
+        return self.__array.__str__()
+
+    def __repr__(self):
+        return self.__array.__repr__()
 
     @property
     def shape(self):
         return self.__array.shape
-
-    def unwrap(self):
-        return self.__array
 
     def __getitem__(self, key):
         return self.__array[key]
@@ -42,6 +41,13 @@ class NdArrayWrapper(object):
     def __setitem__(self, key, value):
         self.__array[key] = value
         self.dirty = True
+
+    @property
+    def empty(self):
+        return self.__array is None
+
+    def unwrap(self):
+        return self.__array
 
 
 class ByteCache(object):
@@ -114,27 +120,27 @@ class ByteCache(object):
     def set_defaults(self):
         for d in self.definition.definitions:
             if isinstance(d, Struct):
-                self.values[d].set_defaults()
+                self[d].set_defaults()
 
             elif isinstance(d, Array):
                 if isinstance(d.definition, Struct):
                     for indices in NdArray.iterate(d.shape()):
-                        NdArray.get(self.values[d], indices).set_defaults()
+                        NdArray.get(self[d], indices).set_defaults()
 
                 elif isinstance(d.definition, (Scalar, Vector, Matrix)):
-                    self.values[d] = np.zeros(d.shape_extended(), dtype=d.definition.numpy_dtype())
+                    self[d] = np.zeros(d.shape_extended(), dtype=d.definition.numpy_dtype())
 
                 else:
                     raise RuntimeError()
 
             elif isinstance(d, Matrix):
-                self.values[d] = np.zeros(d.shape(), dtype=d.numpy_dtype())
+                self[d] = np.zeros(d.shape(), dtype=d.numpy_dtype())
 
             elif isinstance(d, Vector):
-                self.values[d] = np.zeros(d.length(), dtype=d.numpy_dtype())
+                self[d] = np.zeros(d.length(), dtype=d.numpy_dtype())
 
             elif isinstance(d, Scalar):
-                self.values[d] = d.numpy_dtype()(0)
+                self[d] = d.numpy_dtype()(0)
 
             else:
                 raise RuntimeError()

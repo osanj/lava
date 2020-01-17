@@ -6,7 +6,7 @@ import unittest
 import numpy as np
 
 from lava.api.bytes import Array, Matrix, Vector, Scalar, Struct
-from lava.api.cache import ByteCache
+from lava.api.cache import ByteCache, NdArrayWrapper
 from lava.api.constants.spirv import DataType, Layout, Order
 from lava.api.constants.vk import BufferUsage
 from lava.api.util import NdArray
@@ -92,5 +92,69 @@ class TestByteCache(GlslBasedTest):
         cache.set_defaults()
         self.assert_cache_struct_equals(cache, 0)
 
-    def test_invalidate_array_members(self):
-        pass
+    def test_array_wrapper_creation(self):
+        layout = Layout.STD430
+
+        container = Struct([
+            Array(Scalar.float(), (32,), layout),
+            Vector.vec3(),
+            Matrix(3, 3, DataType.FLOAT, layout),
+            Array(Struct([
+                Scalar.double(),
+                Vector.vec3(),
+            ], layout), (3,), layout),
+        ], layout)
+
+        cache = ByteCache(container)
+        self.assertIsInstance(cache[0], NdArrayWrapper)
+        self.assertIsInstance(cache[1], NdArrayWrapper)
+        self.assertIsInstance(cache[2], NdArrayWrapper)
+        self.assertIsInstance(cache[3][0][1], NdArrayWrapper)
+
+        cache.set_defaults()
+        self.assertIsInstance(cache[0], NdArrayWrapper)
+        self.assertIsInstance(cache[1], NdArrayWrapper)
+        self.assertIsInstance(cache[2], NdArrayWrapper)
+        self.assertIsInstance(cache[3][0][1], NdArrayWrapper)
+
+        cache.set_dirty(False)
+        self.assertFalse(cache.is_dirty())
+
+        vector = cache[3][0][1]
+        vector[2] = 1
+        self.assertTrue(cache.is_dirty())
+
+    def test_array_wrapper_assignment(self):
+        layout = Layout.STD430
+        n = 16
+        zeros = np.zeros(n)
+        ones = np.ones(n)
+        twos = 2 * ones
+
+        container = Struct([
+            Array(Scalar.float(), (n,), layout)
+        ], layout)
+
+        cache = ByteCache(container)
+        cache.set_defaults()
+        cache.set_dirty(False)
+
+        self.assertIsInstance(cache[0], NdArrayWrapper)
+        np.testing.assert_equal(cache[0].unwrap(), zeros)
+
+        # assign plain nd array
+        cache[0] = ones
+        self.assertIsInstance(cache[0], NdArrayWrapper)
+        np.testing.assert_equal(cache[0].unwrap(), ones)
+
+        # assign already wrapped nd array
+        cache[0] = NdArrayWrapper(twos)
+        self.assertIsInstance(cache[0], NdArrayWrapper)
+        np.testing.assert_equal(cache[0].unwrap(), twos)
+
+    def test_array_wrapper_attribute_hint(self):
+        data = np.zeros(8)
+        wrapper = NdArrayWrapper(data)
+        get_dtype = lambda w: w.dtype
+        self.assertRaisesRegex(AttributeError, r".*\.unwrap().*", get_dtype, wrapper)
+        # self.assertRaisesRegex(AttributeError, r".*", get_dtype, wrapper)
