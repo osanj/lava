@@ -150,3 +150,28 @@ def mask_to_bounds(mask):
     bounds_start = idx[mask_start]
     bounds_end = idx[mask_end]
     return np.stack((bounds_start, bounds_end)).transpose()
+
+
+def merge_bounds(bounds, max_distance):
+    new_bounds = []
+
+    a, b = bounds[0]
+    for a_, b_ in bounds[1:-1]:
+        if a_ - b <= max_distance:
+            b = b_
+        else:
+            new_bounds.append([a, b])
+            a = a_
+            b = b_
+
+    a_, b_ = bounds[-1]
+    if a_ - b <= max_distance:
+        b = b_
+        new_bounds.append([a, b])
+    else:
+        new_bounds.append([a, b])
+        new_bounds.append([a_, b_])
+
+    return new_bounds
+
+

@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from lava.api.util import mask_to_bounds
+from lava.api.util import mask_to_bounds, merge_bounds
 from test.api.base import GlslBasedTest
 
 
@@ -27,3 +27,8 @@ class TestUtil(GlslBasedTest):
         mask = np.array([1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 1], dtype=bool)
         expected_bounds = [(0, 2), (3, 6), (7, 8), (9, 10), (13, 14)]
         np.testing.assert_array_equal(expected_bounds, mask_to_bounds(mask))
+
+    def test_merge_bounds(self):
+        input_bounds = [(0, 1), (4, 6), (7, 8), (9, 10), (13, 14)]
+        expected_bounds = [(0, 1), (4, 10), (13, 14)]
+        np.testing.assert_array_equal(expected_bounds, merge_bounds(input_bounds, 2))

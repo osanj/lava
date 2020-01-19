@@ -10,7 +10,7 @@ from lava.api.constants.spirv import Access
 from lava.api.constants.vk import BufferUsage, MemoryType
 from lava.api.memory import Buffer as _Buffer
 from lava.api.pipeline import CopyOperation
-from lava.api.util import Destroyable, LavaError, LavaUnsupportedError, mask_to_bounds
+from lava.api.util import Destroyable, LavaError, LavaUnsupportedError, mask_to_bounds, merge_bounds
 
 __all__ = ["BufferCPU", "BufferGPU", "StagedBuffer"]
 
@@ -269,6 +269,21 @@ class StagedBuffer(BufferInterface):
             mask = self.buffer_cpu.flush()
             if self.flush_mode is self.FLUSH_PARTIAL:
                 bounds = mask_to_bounds(mask)
+
+                if len(bounds) > 1:
+                    tmp = np.array(bounds)
+                    print("mean_dist", np.mean(tmp[1:, 0] - tmp[:-1, 1]))
+
+                # bounds_merged = merge_bounds(bounds, max_distance=128)
+                bounds_merged = merge_bounds(bounds, max_distance=4096)
+                print("Got {} bounds ({} w/o merging)".format(len(bounds_merged), len(bounds)))
+
+                # nb_bytes = np.sum([b - a for a, b in bounds_merged])
+                # nb_bytes_overall = self.block_definition.size()
+                # print("Updating {:.3f}% of the buffer".format(100 * nb_bytes / nb_bytes_overall))
+
+                bounds = bounds_merged
+
         self.buffer_cpu.copy_to(self.buffer_gpu, bounds=bounds)
         self.fresh_bytez = False
 
