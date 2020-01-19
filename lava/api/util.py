@@ -5,6 +5,8 @@ import itertools
 import logging
 import operator
 
+import numpy as np
+
 import lava.api.vulkan as vk
 
 
@@ -137,3 +139,14 @@ class NdArray(object):
             data = data[index]
 
         return data
+
+
+def mask_to_bounds(mask):
+    mask_padded = np.pad(mask, (1, 1), mode="constant", constant_values=(0, 0))
+    mask_start = ~mask_padded[:-1] & mask_padded[1:]
+    mask_end = mask_padded[:-1] & ~mask_padded[1:]
+
+    idx = np.arange(len(mask) + 1)
+    bounds_start = idx[mask_start]
+    bounds_end = idx[mask_end]
+    return np.stack((bounds_start, bounds_end)).transpose()

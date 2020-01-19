@@ -2,13 +2,15 @@
 
 import warnings
 
+import numpy as np
+
 from lava.api.bytes import Struct
 from lava.api.cache import ByteCache
 from lava.api.constants.spirv import Access
 from lava.api.constants.vk import BufferUsage, MemoryType
 from lava.api.memory import Buffer as _Buffer
 from lava.api.pipeline import CopyOperation
-from lava.api.util import Destroyable, LavaError, LavaUnsupportedError
+from lava.api.util import Destroyable, LavaError, LavaUnsupportedError, mask_to_bounds
 
 __all__ = ["BufferCPU", "BufferGPU", "StagedBuffer"]
 
@@ -106,8 +108,8 @@ class Buffer(BufferInterface):
     def get_location(self):
         return self.location
 
-    def copy_to(self, other):
-        self.copy_operation.record(self.vulkan_buffer, other.vulkan_buffer)
+    def copy_to(self, other, bounds=None):
+        self.copy_operation.record(self.vulkan_buffer, other.vulkan_buffer, bounds)
         self.copy_operation.run_and_wait()
 
 
@@ -125,10 +127,11 @@ class BufferCPU(Buffer):
         self.fresh_bytez = False
 
     @classmethod
-    def from_shader(cls, session, shader, binding, sync_mode=BufferInterface.SYNC_DEFAULT):
+    def from_shader(cls, session, shader, binding, sync_mode=BufferInterface.SYNC_DEFAULT,
+                    flush_mode=BufferInterface.FLUSH_DEFAULT):
         block_definition = shader.get_block_definition(binding)
         block_usage = shader.get_block_usage(binding)
-        return cls(session, block_definition, block_usage, sync_mode)
+        return cls(session, block_definition, block_usage, sync_mode, flush_mode)
 
     def before_stage(self, stage, binding, access_modifier):
         if access_modifier in [Access.READ_ONLY, Access.READ_WRITE]:
@@ -162,9 +165,19 @@ class BufferCPU(Buffer):
 
         data = self.cache.get_as_dict()
         bytez = self.block_definition.to_bytes(data)
-        self.vulkan_buffer.map(bytez)
+
+        if self.flush_mode is self.FLUSH_PARTIAL:
+            with self.vulkan_buffer.mapped() as bytez_current:
+                dirty_mask = np.array(bytez) != bytez_current
+                bytez_current[:] = bytez
+        else:
+            dirty_mask = np.ones(len(bytez), dtype=bool)
+            self.vulkan_buffer.map(bytez)
+
         self.cache.set_dirty(False)
         self.fresh_bytez = False
+
+        return dirty_mask
 
     def fetch(self):
         if self.cache.is_dirty():
@@ -214,10 +227,11 @@ class StagedBuffer(BufferInterface):
         self.buffer_gpu.destroy()
 
     @classmethod
-    def from_shader(cls, session, shader, binding, sync_mode=BufferInterface.SYNC_DEFAULT):
+    def from_shader(cls, session, shader, binding, sync_mode=BufferInterface.SYNC_DEFAULT,
+                    flush_mode=BufferInterface.FLUSH_DEFAULT):
         block_definition = shader.get_block_definition(binding)
         block_usage = shader.get_block_usage(binding)
-        return cls(session, block_definition, block_usage, sync_mode)
+        return cls(session, block_definition, block_usage, sync_mode, flush_mode)
 
     def get_vulkan_buffer(self):
         return self.buffer_gpu.get_vulkan_buffer()
@@ -248,9 +262,12 @@ class StagedBuffer(BufferInterface):
         return not self.fresh_bytez and self.buffer_cpu.is_synced()
 
     def flush(self):
+        bounds = None
         if self.buffer_cpu.cache.is_dirty():
-            self.buffer_cpu.flush()
-        self.buffer_cpu.copy_to(self.buffer_gpu)
+            mask = self.buffer_cpu.flush()
+            if self.flush_mode is self.FLUSH_PARTIAL:
+                bounds = mask_to_bounds(mask)
+        self.buffer_cpu.copy_to(self.buffer_gpu, bounds=bounds)
         self.fresh_bytez = False
 
     def fetch(self):

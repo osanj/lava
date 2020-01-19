@@ -195,12 +195,13 @@ class CopyOperation(Destroyable):
         vk.vkDestroyCommandPool(self.device.handle, self.command_pool_handle, None)
         self.fence.destroy()
 
-    def record(self, src_buffer, dst_buffer):
+    def record(self, src_buffer, dst_buffer, bounds=None):
         vk.vkBeginCommandBuffer(self.command_buffer_handle,
                                 vk.VkCommandBufferBeginInfo(flags=vk.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT))
-
-        region = vk.VkBufferCopy(0, 0, src_buffer.get_size())
-        vk.vkCmdCopyBuffer(self.command_buffer_handle, src_buffer.handle, dst_buffer.handle, 1, [region])
+        if bounds is None:
+            bounds = [(0, src_buffer.get_size())]
+        regions = [vk.VkBufferCopy(a, a, b - a) for a, b in bounds]
+        vk.vkCmdCopyBuffer(self.command_buffer_handle, src_buffer.handle, dst_buffer.handle, len(regions), regions)
 
         vk.vkEndCommandBuffer(self.command_buffer_handle)
 

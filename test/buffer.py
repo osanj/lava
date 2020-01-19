@@ -229,11 +229,11 @@ class BufferTest(unittest.TestCase):
             layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
             
             layout(std140, binding = 0) buffer readonly BufferA {
-                float[128] arrayIn;
+                float[1280] arrayIn;
             } ;
             
             layout(std140, binding = 1) buffer writeonly BufferB {
-                float[128] arrayOut;
+                float[1280] arrayOut;
             };
 
             void main() {
@@ -246,6 +246,30 @@ class BufferTest(unittest.TestCase):
         # * special attention necessary for scalar arrays, anyway
         # * make optional (also for testing purposes)
 
+        shader = self.shader_from_txt(glsl, verbose=False)
+        sync_mode = lv.BufferCPU.SYNC_LAZY
+        flush_mode = lv.BufferCPU.FLUSH_PARTIAL
+        # flush_mode = lv.BufferCPU.FLUSH_FULL
+
+        buffer_in = lv.StagedBuffer.from_shader(self.session, shader, binding=0, sync_mode=sync_mode,
+                                                flush_mode=flush_mode)
+        buffer_out = lv.StagedBuffer.from_shader(self.session, shader, binding=1, sync_mode=sync_mode)
+        length = buffer_in["arrayIn"].shape[0]
+
+        stage = lv.Stage(shader, {0: buffer_in, 1: buffer_out})
+        stage.record(1, 1, 1)
+
+        buffer_in["arrayIn"] = np.ones(length, dtype=np.float32)
+        stage.run_and_wait()
+        np.testing.assert_equal(buffer_in["arrayIn"].unwrap(), buffer_out["arrayOut"].unwrap())
+
+        buffer_in["arrayIn"][length // 2:] = 2
+        stage.run_and_wait()
+
+
+
+
+    def test_partial_flush_of_nested(self):
         pass
 
 # more tests:
