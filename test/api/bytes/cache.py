@@ -157,4 +157,3 @@ class TestByteCache(GlslBasedTest):
         wrapper = NdArrayWrapper(data)
         get_dtype = lambda w: w.dtype
         self.assertRaisesRegex(AttributeError, r".*\.unwrap().*", get_dtype, wrapper)
-        # self.assertRaisesRegex(AttributeError, r".*", get_dtype, wrapper)

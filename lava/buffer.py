@@ -23,6 +23,10 @@ class BufferInterface(Destroyable):
     SYNC_MANUAL = "manual"
     SYNC_DEFAULT = SYNC_LAZY
 
+    FLUSH_FULL = "full"
+    FLUSH_PARTIAL = "partial"
+    FLUSH_DEFAULT = FLUSH_FULL
+
     def __init__(self, session, block_definition, block_usage):
         super(BufferInterface, self).__init__()
         if not isinstance(block_definition, Struct):
@@ -109,10 +113,15 @@ class Buffer(BufferInterface):
 
 class BufferCPU(Buffer):
 
-    def __init__(self, session, block_definition, block_usage, sync_mode=BufferInterface.SYNC_DEFAULT):
+    def __init__(self, session, block_definition, block_usage, sync_mode=BufferInterface.SYNC_DEFAULT,
+                 flush_mode=BufferInterface.FLUSH_DEFAULT):
         super(BufferCPU, self).__init__(session, block_definition, block_usage, Buffer.LOCATION_CPU)
         self.cache = ByteCache(self.block_definition)
+        self.cache.set_defaults()
+        self.cache.set_dirty(False)
+
         self.sync_mode = sync_mode
+        self.flush_mode = flush_mode
         self.fresh_bytez = False
 
     @classmethod
@@ -191,11 +200,13 @@ class BufferGPU(Buffer):
 
 class StagedBuffer(BufferInterface):
 
-    def __init__(self, session, block_definition, block_usage, sync_mode=BufferInterface.SYNC_DEFAULT):
+    def __init__(self, session, block_definition, block_usage, sync_mode=BufferInterface.SYNC_DEFAULT,
+                 flush_mode=BufferInterface.FLUSH_DEFAULT):
         super(StagedBuffer, self).__init__(session, block_definition, block_usage)
-        self.buffer_cpu = BufferCPU(session, block_definition, block_usage, sync_mode)
+        self.buffer_cpu = BufferCPU(session, block_definition, block_usage, sync_mode, flush_mode)
         self.buffer_gpu = BufferGPU(session, block_definition, block_usage)
         self.sync_mode = sync_mode
+        self.flush_mode = flush_mode
         self.fresh_bytez = False
 
     def _destroy(self):

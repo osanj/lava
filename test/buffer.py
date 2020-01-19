@@ -121,7 +121,7 @@ class BufferTest(unittest.TestCase):
             if sync_mode is lv.BufferCPU.SYNC_LAZY:
                 self.assertTrue(buffer_out.is_synced())
 
-    def test_detection_of_partially_modified_buffer(self):
+    def test_dirty_cache_detection(self):
         glsl = """
             #version 450
             #extension GL_ARB_separate_shader_objects : enable
@@ -210,39 +210,34 @@ class BufferTest(unittest.TestCase):
             self.assertEqual(buffer_in["var1"], new_value)
             self.assertEqual(buffer_out["var1"], new_value)
 
-    def test_update_of_partially_modified_buffer(self):
+            # change only part of array
+            new_value = 9999.0
+            slize = np.s_[-1, -1]
+            buffer_in["var3"][slize] = new_value
+            self.assertFalse(buffer_in.is_synced())
+
+            stage.run_and_wait()
+
+            self.assertEqual(buffer_in["var3"][slize], new_value)
+            self.assertEqual(buffer_out["var3"][slize], new_value)
+
+    def test_partial_flush_of_array(self):
         glsl = """
             #version 450
             #extension GL_ARB_separate_shader_objects : enable
 
             layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
             
-            struct Struct1 {
-                uint var1;
-                uint var2;
-            };
-            
-            struct Struct2 {
-                double var1;
-                Struct1[2] var2;
-            };
-
             layout(std140, binding = 0) buffer readonly BufferA {
-                float var1;
-                Struct2 var2;
-                vec2[3] var3;
-            } inputData;
+                float[128] arrayIn;
+            } ;
             
             layout(std140, binding = 1) buffer writeonly BufferB {
-                float var1;
-                Struct2 var2;
-                vec2[3] var3;
-            } outputData;
+                float[128] arrayOut;
+            };
 
             void main() {
-                outputData.var1 = inputData.var1;
-                outputData.var2 = inputData.var2;
-                outputData.var3 = inputData.var3;
+                arrayOut = arrayIn;
             }
             """
 
