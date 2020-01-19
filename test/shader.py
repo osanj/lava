@@ -128,7 +128,7 @@ class ShaderTest(unittest.TestCase):
         stage.record(*im.shape)
         stage.run_and_wait()
 
-        im_filtered = buf_out["imageOut"]
+        im_filtered = buf_out["imageOut"].unwrap()
 
         # convolution on cpu
         padding = 2

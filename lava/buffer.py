@@ -125,6 +125,7 @@ class BufferCPU(Buffer):
         self.sync_mode = sync_mode
         self.flush_mode = flush_mode
         self.fresh_bytez = False
+        self.first_flush = True
 
     @classmethod
     def from_shader(cls, session, shader, binding, sync_mode=BufferInterface.SYNC_DEFAULT,
@@ -166,7 +167,7 @@ class BufferCPU(Buffer):
         data = self.cache.get_as_dict()
         bytez = self.block_definition.to_bytes(data)
 
-        if self.flush_mode is self.FLUSH_PARTIAL:
+        if self.flush_mode is self.FLUSH_PARTIAL and not self.first_flush:
             with self.vulkan_buffer.mapped() as bytez_current:
                 dirty_mask = np.array(bytez) != bytez_current
                 bytez_current[:] = bytez
@@ -174,6 +175,7 @@ class BufferCPU(Buffer):
             dirty_mask = np.ones(len(bytez), dtype=bool)
             self.vulkan_buffer.map(bytez)
 
+        self.first_flush = False
         self.cache.set_dirty(False)
         self.fresh_bytez = False
 

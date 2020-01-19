@@ -44,7 +44,7 @@ class BufferTest(unittest.TestCase):
         buffer_a.copy_to(buffer_b)
         buffer_b.fetch()
 
-        self.assertTrue((buffer_a[0] == buffer_b[0]).all())
+        self.assertTrue((buffer_a[0].unwrap() == buffer_b[0].unwrap()).all())
 
     def test_copy_over_gpu(self):
         data = np.arange(128, dtype=np.float32)
@@ -60,7 +60,7 @@ class BufferTest(unittest.TestCase):
         buffer_gpu.copy_to(buffer_b)
         buffer_b.fetch()
 
-        self.assertTrue((buffer_a[0] == buffer_b[0]).all())
+        self.assertTrue((buffer_a[0].unwrap() == buffer_b[0].unwrap()).all())
 
     def test_sync_modes(self):
         glsl = """
@@ -116,7 +116,7 @@ class BufferTest(unittest.TestCase):
             if sync_mode is lv.BufferCPU.SYNC_EAGER:
                 self.assertTrue(buffer_out.is_synced())
 
-            self.assertTrue((buffer_in[0] == buffer_out[0]).all())
+            self.assertTrue((buffer_in[0].unwrap() == buffer_out[0].unwrap()).all())
 
             if sync_mode is lv.BufferCPU.SYNC_LAZY:
                 self.assertTrue(buffer_out.is_synced())

@@ -63,7 +63,10 @@ class TestByteCache(GlslBasedTest):
                 cls.assert_cache_array_equals(cache[d], d.shape(), value)
 
             else:
-                np.testing.assert_equal(cache[d], value)
+                v = cache[d]
+                if isinstance(v, NdArrayWrapper):
+                    v = v.unwrap()
+                np.testing.assert_equal(v, value)
 
     @classmethod
     def assert_cache_array_equals(cls, caches, shape, value):

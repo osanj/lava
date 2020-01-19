@@ -6,7 +6,7 @@ import unittest
 import numpy as np
 
 from lava.api.bytes import Matrix, Scalar, Vector
-from lava.api.cache import ByteCache
+from lava.api.cache import ByteCache, NdArrayWrapper
 from lava.api.constants.spirv import DataType, Layout, Order
 
 from test.api.base import GlslBasedTest
@@ -70,7 +70,7 @@ class CombinedTest(GlslBasedTest):
             bytez_out = self.run_compiled_program(shader, bytez_in, bytez_out_count, groups=im.shape)
             cache_out.set_from_dict(cache_out.definition.from_bytes(bytez_out))
 
-            self.assertTrue((cache_out["imageOut"] == im).all())
+            self.assertTrue((cache_out["imageOut"].unwrap() == im).all())
 
     def test_pass_through_array_of_vectors(self):
         glsl_template = """
@@ -122,7 +122,7 @@ class CombinedTest(GlslBasedTest):
             bytez_out = self.run_compiled_program(shader, bytez_in, bytez_out_count, groups=(h, w, 1))
             cache_out.set_from_dict(cache_out.definition.from_bytes(bytez_out))
 
-            self.assertTrue((cache_out["imageOut"] == im).all())
+            self.assertTrue((cache_out["imageOut"].unwrap() == im).all())
 
     def test_pass_through_array_of_matrices(self):
         glsl_template = """
@@ -182,7 +182,7 @@ class CombinedTest(GlslBasedTest):
             bytez_out = self.run_compiled_program(shader, bytez_in, bytez_out_count, groups=(h, w, 1))
             cache_out.set_from_dict(cache_out.definition.from_bytes(bytez_out))
 
-            self.assertTrue((cache_out["dataOut"] == mat).all())
+            self.assertTrue((cache_out["dataOut"].unwrap() == mat).all())
 
     def test_pass_through_matrix(self):
         glsl_template = """
@@ -233,7 +233,7 @@ class CombinedTest(GlslBasedTest):
             bytez_out = self.run_compiled_program(shader, bytez_in, bytez_out_count)
             cache_out.set_from_dict(cache_out.definition.from_bytes(bytez_out))
 
-            self.assertTrue((cache_out["matrixOut"] == mat).all())
+            self.assertTrue((cache_out["matrixOut"].unwrap() == mat).all())
 
     def test_pass_through_struct(self):
         glsl_template = """
@@ -304,6 +304,11 @@ class CombinedTest(GlslBasedTest):
             for i, member in enumerate(members):
                 a = cache_in["structIn"][i]
                 b = cache_out["structOut"][i]
+
+                if member.array_based():
+                    a = a.unwrap()
+                    b = b.unwrap()
+
                 if isinstance(member, Vector):
                     a = a.tolist()
                     b = b.tolist()
@@ -368,8 +373,8 @@ class CombinedTest(GlslBasedTest):
             if m == 1:
                 self.assertEqual(cache_out["dataOut"], data_in)
             else:
-                self.assertTrue((cache_out["dataOut"] == data_in).all())
-            self.assertTrue((cache_out["dataArrayOut"] == data_array_in).all())
+                self.assertTrue((cache_out["dataOut"].unwrap() == data_in).all())
+            self.assertTrue((cache_out["dataArrayOut"].unwrap() == data_array_in).all())
 
 
 if __name__ == "__main__":
