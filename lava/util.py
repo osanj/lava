@@ -11,19 +11,20 @@ __all__ = ["compile_glsl"]
 EXT_SPIR_V = ".spv"
 
 
-def compile_glsl(path, verbose=True):
+def compile_glsl(path, verbose=True, path_compiler=None):
     path_output = path + EXT_SPIR_V
 
     if platform.system() not in ("Windows", "Linux"):
         raise NotImplementedError()
 
-    if ENV_VAR_SDK not in os.environ:
-        raise RuntimeError("Could not find environment variable {}".format(ENV_VAR_SDK))
+    if path_compiler is None:
+        if ENV_VAR_SDK not in os.environ:
+            raise RuntimeError("Could not find environment variable {}".format(ENV_VAR_SDK))
 
-    if platform.system() == "Linux":
-        path_compiler = os.path.join(os.environ[ENV_VAR_SDK], "bin", "glslangValidator")
-    else:
-        path_compiler = os.path.join(os.environ[ENV_VAR_SDK], "Bin", "glslangValidator.exe")
+        if platform.system() == "Linux":
+            path_compiler = os.path.join(os.environ[ENV_VAR_SDK], "bin", "glslangValidator")
+        else:
+            path_compiler = os.path.join(os.environ[ENV_VAR_SDK], "Bin", "glslangValidator.exe")
 
     cmd = [path_compiler, "-V", path, "-o", path_output]
 
