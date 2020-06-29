@@ -20,6 +20,9 @@ pip install lava
 The Vulkan SDK needs to be installed and its environment variables need to be set.
 See the LunarG guide for [Linux](https://vulkan.lunarg.com/doc/view/1.1.85.0/linux/getting_started.html) and [Windows](https://vulkan.lunarg.com/doc/view/1.1.85.0/windows/getting_started.html).
 
+See [release 0.4.0](https://github.com/osanj/lava/releases/tag/0.4.0) for some older Vulkan SDK versions which are no longer available on the LunarG download page.
+
+
 ## Support
 
 Sofar `lava` was tested on:
